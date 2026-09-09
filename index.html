@@ -1385,9 +1385,12 @@ async function getFFmpeg() {
   if (typeof FFmpeg === 'undefined') throw new Error('ffmpeg.wasm โหลดไม่สำเร็จ (ตรวจสอบอินเทอร์เน็ต)');
 
   const { createFFmpeg } = FFmpeg;
+  // ใช้ core-st (Single-Threaded) — ไม่ต้องพึ่ง SharedArrayBuffer
+  // เพราะ file:// และ GitHub Pages ปกติไม่มี COOP/COEP header ที่ SharedArrayBuffer ต้องการ
   ffmpegInstance = createFFmpeg({
     log: false,
-    corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
+    corePath: 'https://unpkg.com/@ffmpeg/core-st@0.11.1/dist/ffmpeg-core.js',
+    mainName: 'main'
   });
   await ffmpegInstance.load();
   return ffmpegInstance;
@@ -1612,15 +1615,23 @@ async function exportVideo() {
   // MediaRecorder สร้างไฟล์แบบ "live stream" ไม่มี seek table (moov atom) ที่ถูกต้อง
   // ทำให้เลื่อนวิดีโอไปมาไม่ได้ในหลาย Player (รวม Shopee App)
   // แก้โดย Remux ใหม่ผ่าน ffmpeg.wasm — เร็วเพราะไม่ต้อง re-encode (ใช้ -c copy)
-  document.getElementById('prog-text').textContent = '🔧 กำลังแก้ไฟล์ให้เลื่อนวิดีโอได้... (ครั้งแรกอาจใช้เวลา 10-30 วิ)';
+  document.getElementById('prog-text').textContent = '🔧 กำลังโหลด Engine แก้ไฟล์... (ครั้งแรกอาจใช้เวลา 10-30 วิ)';
   document.getElementById('prog-fill').style.width  = '100%';
 
+  let remuxOk = false;
   try {
+    console.log('[Remux] เริ่มโหลด ffmpeg.wasm...');
     exportedBlob = await remuxForSeekable(rawBlob, ext);
+    remuxOk = true;
+    console.log('[Remux] ✅ สำเร็จ — ขนาดไฟล์ใหม่:', (exportedBlob.size/1024/1024).toFixed(2), 'MB');
   } catch(e) {
-    console.warn('Remux failed, ใช้ไฟล์ดิบแทน:', e);
+    console.error('[Remux] ❌ ล้มเหลว:', e);
     exportedBlob = rawBlob; // Fallback — ยังเล่นได้ปกติ แต่ seek อาจไม่ลื่น
-    toast('⚠️ แก้ไฟล์อัตโนมัติไม่สำเร็จ — ใช้ไฟล์ต้นฉบับแทน (อาจ seek ไม่ได้เต็มที่)');
+    setExportStatus('err',
+      '⚠️ แก้ไฟล์ให้ Seek ได้ไม่สำเร็จ: ' + (e?.message || String(e)) +
+      '<br>ใช้ไฟล์ต้นฉบับแทน (อาจเลื่อนวิดีโอไม่ได้เต็มที่) — เปิด Console (F12) ดู [Remux] log เพื่อ debug เพิ่มเติมครับ'
+    );
+    toast('⚠️ แก้ไฟล์ไม่สำเร็จ — ดูรายละเอียดใต้ปุ่ม Export');
   }
 
   const url = URL.createObjectURL(exportedBlob);
@@ -1633,13 +1644,20 @@ async function exportVideo() {
   document.getElementById('prog-text').textContent         = '✅ Export เสร็จแล้ว!';
   document.getElementById('btn-upload-drive').disabled     = false;
 
+  if (remuxOk) {
+    setExportStatus('ok', '✅ แก้ไฟล์ให้ Seek ได้เรียบร้อยแล้ว — เลื่อนวิดีโอได้ปกติทุก Player');
+  }
+
   const player = document.getElementById('export-player');
   player.src   = url;
   player.style.display = 'block';
   player.play().catch(() => {});
 
   btn.disabled=false; btn.textContent='🎬 Export MP4';
-  toast(`✅ Export เสร็จ! (${(exportedBlob.size/1024/1024).toFixed(1)} MB) — เลื่อนวิดีโอได้ปกติแล้ว`);
+  toast(remuxOk
+    ? `✅ Export เสร็จ! (${(exportedBlob.size/1024/1024).toFixed(1)} MB) — เลื่อนวิดีโอได้ปกติแล้ว`
+    : `⚠️ Export เสร็จ แต่ไฟล์อาจ seek ไม่ได้เต็มที่ (${(exportedBlob.size/1024/1024).toFixed(1)} MB)`
+  );
 
 }
 
