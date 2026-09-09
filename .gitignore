@@ -1,0 +1,12 @@
+# Build artifacts / redundant archives (source folders are committed)
+*.zip
+
+# Secrets — never commit API keys
+secrets.json
+.env
+.env.*
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+node_modules/

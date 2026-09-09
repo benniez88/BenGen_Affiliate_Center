@@ -1,0 +1,210 @@
+{
+  "name": "BenGen — B: Video Builder (MP3 → MP4)",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": { "item": [{ "mode": "everyMinute" }] },
+        "triggerOn": "rowUpdated",
+        "sheetName": { "value": "Content" },
+        "options": {}
+      },
+      "id": "trigger-mp3-ready",
+      "name": "🔔 MP3 Ready in Content Sheet",
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 4,
+      "position": [240, 300],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "google-sheets-cred", "name": "Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.voiceStatus }}",
+              "rightValue": "done",
+              "operator": { "type": "string", "operation": "equals" }
+            },
+            {
+              "leftValue": "={{ $json.videoStatus }}",
+              "rightValue": "pending",
+              "operator": { "type": "string", "operation": "equals" }
+            },
+            {
+              "leftValue": "={{ $json.mp3DriveUrl }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEquals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-mp3-ready",
+      "name": "✅ Check: MP3 Ready, Video Pending",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.APPS_SCRIPT_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/json" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"action\": \"getDriveUrl\",\n  \"productId\": \"{{ $json.productId }}\"\n}",
+        "options": {}
+      },
+      "id": "get-drive-folder",
+      "name": "📁 Get Drive Folder URL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.APPS_SCRIPT_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/json" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"action\": \"updateStatus\",\n  \"sheet\": \"Content\",\n  \"id\": \"{{ $('🔔 MP3 Ready in Content Sheet').first().json.id }}\",\n  \"field\": \"videoStatus\",\n  \"value\": \"processing\"\n}",
+        "options": {}
+      },
+      "id": "mark-processing",
+      "name": "⏳ Mark Video: Processing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 220]
+    },
+    {
+      "parameters": {
+        "jsCode": "// เตรียม metadata สำหรับสร้างวิดีโอ\nconst content    = $('🔔 MP3 Ready in Content Sheet').first().json;\nconst driveInfo  = $('📁 Get Drive Folder URL').first().json;\n\nreturn [{\n  json: {\n    contentId:      content.id,\n    productId:      content.productId,\n    productName:    content.productName,\n    hook:           content.hook,\n    caption:        content.caption,\n    mp3DriveUrl:    content.mp3DriveUrl,\n    driveFolderUrl: driveInfo.driveFolderUrl || '',\n    driveImageUrl:  driveInfo.driveImageUrl  || '',\n    // n8n ส่งไป Video Builder API หรือ trigger manual\n    readyAt: new Date().toISOString(),\n    message: `วิดีโอสำหรับ \"${content.productName}\" พร้อมสร้าง\\nMP3: ${content.mp3DriveUrl}\\nรูปสินค้า: ${driveInfo.driveImageUrl}\\nFolder: ${driveInfo.driveFolderUrl}`\n  }\n}];"
+      },
+      "id": "prepare-video-data",
+      "name": "🎬 Prepare Video Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 220]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $vars.VIDEO_API_URL }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEquals" }
+            }
+          ]
+        }
+      },
+      "id": "check-video-api",
+      "name": "🔀 Has Video API?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1440, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.VIDEO_API_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/json" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contentId\": \"{{ $json.contentId }}\",\n  \"productName\": \"{{ $json.productName }}\",\n  \"hook\": {{ JSON.stringify($json.hook) }},\n  \"mp3DriveUrl\": \"{{ $json.mp3DriveUrl }}\",\n  \"driveImageUrl\": \"{{ $json.driveImageUrl }}\",\n  \"driveFolderUrl\": \"{{ $json.driveFolderUrl }}\"\n}",
+        "options": {}
+      },
+      "id": "call-video-api",
+      "name": "🎬 Call Video Builder API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1680, 140]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Manual mode — แจ้งให้รู้ว่าพร้อมสร้างวิดีโอ\nconst d = $input.first().json;\nconsole.log('🎬 Video ready to build:');\nconsole.log(d.message);\n\n// TODO: ส่ง Line Notify หรือ Email แจ้งเตือน\nreturn [{ json: { ...d, mode: 'manual_notification' } }];"
+      },
+      "id": "notify-manual",
+      "name": "📢 Notify: Manual Build",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1680, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "// รับผลลัพธ์จาก Video API\nconst result  = $input.first().json;\nconst content = $('🔔 MP3 Ready in Content Sheet').first().json;\n\nconst mp4Url = result.mp4DriveUrl || result.videoUrl || '';\n\nreturn [{\n  json: {\n    contentId:   content.id,\n    mp4DriveUrl: mp4Url,\n    success:     !!mp4Url\n  }\n}];"
+      },
+      "id": "parse-video-result",
+      "name": "📊 Parse Video Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1920, 140]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.APPS_SCRIPT_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/json" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"action\": \"updateStatus\",\n  \"sheet\": \"Content\",\n  \"id\": \"{{ $json.contentId }}\",\n  \"field\": \"videoStatus\",\n  \"value\": \"done\",\n  \"driveUrl\": \"{{ $json.mp4DriveUrl }}\"\n}",
+        "options": {}
+      },
+      "id": "update-video-done",
+      "name": "✅ Update: Video Done",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2160, 140]
+    }
+  ],
+  "connections": {
+    "🔔 MP3 Ready in Content Sheet": {
+      "main": [[{ "node": "✅ Check: MP3 Ready, Video Pending", "type": "main", "index": 0 }]]
+    },
+    "✅ Check: MP3 Ready, Video Pending": {
+      "main": [
+        [{ "node": "📁 Get Drive Folder URL", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "📁 Get Drive Folder URL": {
+      "main": [[{ "node": "⏳ Mark Video: Processing", "type": "main", "index": 0 }]]
+    },
+    "⏳ Mark Video: Processing": {
+      "main": [[{ "node": "🎬 Prepare Video Data", "type": "main", "index": 0 }]]
+    },
+    "🎬 Prepare Video Data": {
+      "main": [[{ "node": "🔀 Has Video API?", "type": "main", "index": 0 }]]
+    },
+    "🔀 Has Video API?": {
+      "main": [
+        [{ "node": "🎬 Call Video Builder API", "type": "main", "index": 0 }],
+        [{ "node": "📢 Notify: Manual Build", "type": "main", "index": 0 }]
+      ]
+    },
+    "🎬 Call Video Builder API": {
+      "main": [[{ "node": "📊 Parse Video Result", "type": "main", "index": 0 }]]
+    },
+    "📊 Parse Video Result": {
+      "main": [[{ "node": "✅ Update: Video Done", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "meta": { "templateCredsSetupCompleted": true },
+  "pinData": {},
+  "versionId": "bengen-v3-workflow-b",
+  "tags": [{ "name": "BenGen" }]
+}

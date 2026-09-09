@@ -1,0 +1,203 @@
+{
+  "name": "BenGen — C: MP3 Upload Watcher",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": { "item": [{ "mode": "everyMinute" }] },
+        "event": "fileCreated",
+        "folderId": {
+          "__rl": true,
+          "value": "={{ $vars.DRIVE_ROOT_FOLDER_ID }}",
+          "mode": "id"
+        },
+        "options": { "includeSubfolders": true }
+      },
+      "id": "trigger-drive-file",
+      "name": "📂 New File in Drive",
+      "type": "n8n-nodes-base.googleDriveTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "credentials": { "googleDriveOAuth2Api": { "id": "google-drive-cred", "name": "Google Drive" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.name }}",
+              "rightValue": ".mp3",
+              "operator": { "type": "string", "operation": "endsWith" }
+            }
+          ]
+        }
+      },
+      "id": "check-mp3",
+      "name": "✅ Is MP3 File?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// แกะชื่อโฟลเดอร์จาก parent ของไฟล์\nconst file = $input.first().json;\n\n// ชื่อโฟลเดอร์ parent = ชื่อสินค้า เช่น 2026-09-08_New-Era-NY-Cap\nconst folderName = file.parents?.[0]?.name || file.driveFile?.parents?.[0] || '';\nconst fileUrl    = `https://drive.google.com/file/d/${file.id}/view`;\nconst directUrl  = `https://drive.google.com/uc?id=${file.id}`;\n\nreturn [{\n  json: {\n    fileId:     file.id,\n    fileName:   file.name,\n    fileUrl,\n    directUrl,\n    folderName,\n    mimeType:   file.mimeType,\n    createdAt:  file.createdTime,\n  }\n}];"
+      },
+      "id": "extract-file-info",
+      "name": "📋 Extract File Info",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.APPS_SCRIPT_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/json" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"action\": \"read\",\n  \"sheet\": \"Products\"\n}",
+        "options": {}
+      },
+      "id": "read-products",
+      "name": "📊 Read Products Sheet",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 220]
+    },
+    {
+      "parameters": {
+        "jsCode": "// หา productId จากชื่อโฟลเดอร์\nconst fileInfo   = $('Extract File Info').first().json;\nconst products   = $input.first().json.rows || [];\nconst folderName = fileInfo.folderName;\n\n// Match โดยเปรียบเทียบชื่อโฟลเดอร์กับ driveFolderUrl ของสินค้า\nconst matched = products.find(p => {\n  const url = p.driveFolderUrl || '';\n  return url.includes(folderName) || folderName.includes(p.id);\n});\n\nif (!matched) {\n  // ลองหาจาก Content Sheet แทน\n  return [{ json: { ...fileInfo, productId: null, contentId: null, matched: false } }];\n}\n\nreturn [{\n  json: {\n    ...fileInfo,\n    productId:      matched.id,\n    productName:    matched.name,\n    driveFolderUrl: matched.driveFolderUrl,\n    matched:        true\n  }\n}];"
+      },
+      "id": "find-product",
+      "name": "🔍 Find Product by Folder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.APPS_SCRIPT_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/json" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"action\": \"read\",\n  \"sheet\": \"Content\"\n}",
+        "options": {}
+      },
+      "id": "read-content",
+      "name": "📊 Read Content Sheet",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 220]
+    },
+    {
+      "parameters": {
+        "jsCode": "// หา contentId จาก productId\nconst prev       = $('Find Product by Folder').first().json;\nconst contents   = $input.first().json.rows || [];\n\nconst matched = contents.find(c =>\n  c.productId === prev.productId && c.voiceStatus !== 'done'\n);\n\nif (!matched) {\n  console.log('No matching content row for productId:', prev.productId);\n  return [{ json: { ...prev, contentId: null, skip: true } }];\n}\n\nreturn [{\n  json: {\n    ...prev,\n    contentId:   matched.id,\n    productName: matched.productName || prev.productName,\n  }\n}];"
+      },
+      "id": "find-content",
+      "name": "🔍 Find Content Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1680, 220]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "notEquals" }
+            },
+            {
+              "leftValue": "={{ $json.contentId }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEquals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-content-found",
+      "name": "✅ Content Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1920, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.APPS_SCRIPT_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/json" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"action\": \"updateStatus\",\n  \"sheet\": \"Content\",\n  \"id\": \"{{ $json.contentId }}\",\n  \"field\": \"voiceStatus\",\n  \"value\": \"done\",\n  \"driveUrl\": \"{{ $json.directUrl }}\"\n}",
+        "options": {}
+      },
+      "id": "update-voice-done",
+      "name": "✅ Update voiceStatus = done",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2160, 140]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconsole.log('✅ MP3 registered:', d.fileName, '→ contentId:', d.contentId);\nreturn [{ json: d }];"
+      },
+      "id": "log-mp3-done",
+      "name": "📊 Log MP3 Registered",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2400, 140]
+    }
+  ],
+  "connections": {
+    "📂 New File in Drive": {
+      "main": [[{ "node": "✅ Is MP3 File?", "type": "main", "index": 0 }]]
+    },
+    "✅ Is MP3 File?": {
+      "main": [
+        [{ "node": "📋 Extract File Info", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "📋 Extract File Info": {
+      "main": [[{ "node": "📊 Read Products Sheet", "type": "main", "index": 0 }]]
+    },
+    "📊 Read Products Sheet": {
+      "main": [[{ "node": "🔍 Find Product by Folder", "type": "main", "index": 0 }]]
+    },
+    "🔍 Find Product by Folder": {
+      "main": [[{ "node": "📊 Read Content Sheet", "type": "main", "index": 0 }]]
+    },
+    "📊 Read Content Sheet": {
+      "main": [[{ "node": "🔍 Find Content Row", "type": "main", "index": 0 }]]
+    },
+    "🔍 Find Content Row": {
+      "main": [[{ "node": "✅ Content Found?", "type": "main", "index": 0 }]]
+    },
+    "✅ Content Found?": {
+      "main": [
+        [{ "node": "✅ Update voiceStatus = done", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "✅ Update voiceStatus = done": {
+      "main": [[{ "node": "📊 Log MP3 Registered", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "meta": { "templateCredsSetupCompleted": true },
+  "pinData": {},
+  "versionId": "bengen-v3-workflow-c",
+  "tags": [{ "name": "BenGen" }]
+}

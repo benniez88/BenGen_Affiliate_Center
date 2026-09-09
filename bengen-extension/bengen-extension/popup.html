@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BenGen Affiliate</title>
+<style>
+:root {
+  --bg:     #0d0a14;
+  --bg2:    #1a1025;
+  --bg3:    #120c1e;
+  --border: #2e1f45;
+  --p:      #8a50b0;
+  --pn:     #c87dff;
+  --pk:     #ff6ec7;
+  --green:  #10b981;
+  --red:    #ef4444;
+  --amber:  #f59e0b;
+  --blue:   #3b82f6;
+  --text:   #eef0f8;
+  --text2:  #9080b0;
+  --text3:  #5a4a70;
+  --font:   'Segoe UI', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  width: 380px;
+  min-height: 500px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 13px;
+  overflow-x: hidden;
+}
+
+/* ── HEADER ── */
+.header {
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.logo {
+  font-size: 11px;
+  font-weight: 800;
+  background: linear-gradient(90deg, var(--pn), var(--pk));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: 0.5px;
+}
+.status-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--text3);
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+.status-dot.ok      { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.status-dot.loading { background: var(--amber); animation: pulse 1s infinite; }
+.status-dot.error   { background: var(--red); }
+.status-text { font-size: 11px; color: var(--text2); flex: 1; }
+.header-btn {
+  padding: 4px 8px; border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--bg3); color: var(--text2);
+  font-size: 11px; cursor: pointer;
+}
+.header-btn:hover { border-color: var(--pn); color: var(--pn); }
+
+/* ── TABS ── */
+.tabs {
+  display: flex;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  flex: 1; padding: 8px;
+  text-align: center; font-size: 12px; font-weight: 600;
+  cursor: pointer; color: var(--text2);
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+}
+.tab.active { color: var(--pn); border-bottom-color: var(--pn); }
+.tab:hover  { color: var(--text); }
+
+/* ── PANELS ── */
+.panel { display: none; padding: 12px; }
+.panel.active { display: block; }
+
+/* ── PRODUCT CARD ── */
+.product-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.product-img {
+  width: 72px; height: 72px;
+  border-radius: 7px;
+  object-fit: cover;
+  background: var(--bg3);
+  flex-shrink: 0;
+}
+.product-img-placeholder {
+  width: 72px; height: 72px;
+  border-radius: 7px;
+  background: var(--bg3);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 28px; flex-shrink: 0;
+}
+.product-info { flex: 1; min-width: 0; }
+.product-name {
+  font-size: 12px; font-weight: 600;
+  line-height: 1.4; margin-bottom: 5px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.product-shop { font-size: 11px; color: var(--text2); margin-bottom: 5px; }
+.badges { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 5px; }
+.badge {
+  font-size: 10px; font-weight: 600;
+  padding: 1px 6px; border-radius: 4px;
+}
+.badge-mall     { background: rgba(239,68,68,.15);   color: #ef4444; }
+.badge-pref     { background: rgba(59,130,246,.15);  color: #60a5fa; }
+.badge-star     { background: rgba(245,158,11,.15);  color: #f59e0b; }
+.badge-sold     { background: rgba(16,185,129,.15);  color: #10b981; }
+.badge-discount { background: rgba(239,68,68,.15);   color: #ef4444; }
+.price-row { display: flex; align-items: baseline; gap: 6px; }
+.price-sale { font-size: 16px; font-weight: 800; color: var(--pn); }
+.price-orig { font-size: 11px; color: var(--text3); text-decoration: line-through; }
+
+/* ── FORM ── */
+.form-group { margin-bottom: 10px; }
+label { display: block; font-size: 11px; color: var(--text2); margin-bottom: 4px; }
+input, select, textarea {
+  width: 100%;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 7px 10px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--pn); }
+textarea { resize: vertical; min-height: 60px; line-height: 1.5; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+/* Model selector */
+.model-wrap { display: flex; flex-direction: column; gap: 6px; }
+.model-select-row { display: flex; gap: 6px; }
+.model-select-row select { flex: 1; }
+#custom-model-input { display: none; }
+
+/* ── BUTTONS ── */
+.btn {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 9px 14px; border-radius: 8px;
+  font-family: var(--font); font-size: 12px; font-weight: 700;
+  cursor: pointer; border: none; width: 100%;
+  transition: all 0.15s;
+}
+.btn + .btn { margin-top: 6px; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-primary { background: linear-gradient(135deg, var(--p), var(--pn)); color: #fff; }
+.btn-primary:hover:not(:disabled) { filter: brightness(1.1); }
+.btn-ghost {
+  background: var(--bg3); color: var(--text);
+  border: 1px solid var(--border);
+}
+.btn-ghost:hover { border-color: var(--pn); color: var(--pn); }
+.btn-green { background: linear-gradient(135deg, #10b981, #34d399); color: #fff; }
+.btn-eleven { background: linear-gradient(135deg, #8b5cf6, #a78bfa); color: #fff; }
+.btn-tts { background: linear-gradient(135deg, #1d4ed8, #3b82f6); color: #fff; }
+.btn-sm { padding: 6px 10px; font-size: 11px; }
+
+/* ── SCRIPT OUTPUT ── */
+.script-section { margin-bottom: 10px; }
+.script-label {
+  font-size: 11px; font-weight: 700;
+  color: var(--pn); margin-bottom: 4px;
+}
+.script-actions { display: flex; gap: 6px; margin-top: 4px; }
+.btn-copy {
+  padding: 3px 8px; border-radius: 4px;
+  background: var(--bg3); color: var(--text2);
+  border: 1px solid var(--border);
+  font-size: 10px; cursor: pointer;
+}
+.btn-copy:hover { border-color: var(--pn); color: var(--pn); }
+
+/* ── AUDIO PLAYER ── */
+#voice-player {
+  width: 100%; height: 36px;
+  margin-top: 6px;
+  display: none;
+  border-radius: 6px;
+}
+
+/* ── STATUS ROWS ── */
+.info-row, .success-row, .error-row, .warn-row {
+  display: flex; gap: 8px;
+  border-radius: 7px; padding: 8px 10px;
+  font-size: 11px; line-height: 1.5;
+  margin-bottom: 10px;
+}
+.info-row    { background: rgba(59,130,246,.1);  border: 1px solid rgba(59,130,246,.25);  color: #93c5fd; }
+.success-row { background: rgba(16,185,129,.1);  border: 1px solid rgba(16,185,129,.25);  color: #6ee7b7; }
+.error-row   { background: rgba(239,68,68,.1);   border: 1px solid rgba(239,68,68,.25);   color: #fca5a5; }
+.warn-row    { background: rgba(245,158,11,.1);  border: 1px solid rgba(245,158,11,.25);  color: #fcd34d; }
+
+/* ── SETTINGS ── */
+.settings-wrap { padding: 12px; display: none; flex-direction: column; gap: 10px; }
+.settings-title { font-size: 13px; font-weight: 700; color: var(--pn); margin-bottom: 4px; }
+
+/* ── EMPTY STATE ── */
+.empty-state {
+  text-align: center;
+  padding: 24px 16px;
+  color: var(--text2);
+}
+.empty-icon { font-size: 36px; margin-bottom: 10px; }
+.empty-text { font-size: 12px; line-height: 1.6; }
+
+/* ── LOADING ── */
+.loading {
+  display: inline-block;
+  width: 12px; height: 12px;
+  border: 2px solid var(--border);
+  border-top-color: var(--pn);
+  border-radius: 50%;
+  animation: spin .5s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+/* ── DIVIDER ── */
+.divider {
+  border: none; border-top: 1px solid var(--border);
+  margin: 10px 0;
+}
+
+/* ── TOAST ── */
+#toast {
+  position: fixed; bottom: 10px; left: 10px; right: 10px;
+  background: var(--bg2);
+  border: 1px solid var(--pn);
+  border-radius: 8px; padding: 8px 12px;
+  font-size: 11px; z-index: 999;
+  opacity: 0; transform: translateY(4px);
+  transition: all .2s; pointer-events: none;
+  box-shadow: 0 0 16px rgba(200,125,255,.3);
+}
+#toast.show { opacity: 1; transform: translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="status-dot" id="status-dot"></div>
+  <div class="logo">⚡ BENGEN AFFILIATE</div>
+  <div class="status-text" id="status-text">กำลังตรวจสอบ...</div>
+  <button class="header-btn" id="settings-btn" >⚙️</button>
+</div>
+
+<!-- SETTINGS PANEL -->
+<div class="settings-wrap" id="settings-panel">
+  <div class="settings-title">⚙️ ตั้งค่า</div>
+
+  <div class="form-group">
+    <label>🔑 Gemini API Key</label>
+    <input type="password" id="s-gemini" placeholder="AIza••••••••••••••" />
+  </div>
+
+  <div class="form-group">
+    <label>🤖 Gemini Model</label>
+    <div class="model-wrap">
+      <div class="model-select-row">
+        <select id="s-model">
+          <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite (Free · เร็ว)</option>
+          <option value="gemini-2.5-flash">gemini-2.5-flash (ดีขึ้น)</option>
+          <option value="gemini-2.5-pro">gemini-2.5-pro (คุณภาพสูง)</option>
+          <option value="custom">✏️ Custom Model...</option>
+        </select>
+      </div>
+      <input type="text" id="s-model-custom" placeholder="กรอกชื่อ model เช่น gemini-3.5-flash" />
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label>🎙️ ElevenLabs API Key <span style="color:var(--text3);font-weight:400;">(ไม่บังคับ)</span></label>
+    <input type="password" id="s-eleven" placeholder="sk_••••••••••••" />
+  </div>
+
+  <div class="form-group">
+    <label>🎙️ ElevenLabs Voice ID</label>
+    <select id="s-voice">
+      <option value="ThT5KcBeYPX3keUQqHPh">🇹🇭 ผู้หญิงไทย (สดใส)</option>
+      <option value="onwK4e9ZLuTAKqWW03F9">🇹🇭 ผู้ชายไทย (หนักแน่น)</option>
+      <option value="XB0fDUnXU5powFXDhCwa">🇹🇭 ผู้หญิงไทย (Professional)</option>
+      <option value="custom">✏️ Custom Voice ID...</option>
+    </select>
+    <input type="text" id="s-voice-custom" placeholder="Voice ID จาก ElevenLabs" style="margin-top:6px;display:none;" />
+  </div>
+
+  <div class="form-group">
+    <label>🔗 Google Sheets URL <span style="color:var(--text3);font-weight:400;">(ไม่บังคับ)</span></label>
+    <input type="text" id="s-sheets" placeholder="https://script.google.com/..." />
+  </div>
+
+  <button class="btn btn-primary" id="save-settings-btn">💾 บันทึก Settings</button>
+  <button class="btn btn-ghost" id="close-settings-btn">✕ ปิด</button>
+</div>
+
+<!-- TABS -->
+<div class="tabs" id="main-tabs">
+  <div class="tab active" id="tab-btn-product">🛍️ สินค้า</div>
+  <div class="tab" id="tab-btn-script">🎬 บทพากย์</div>
+</div>
+
+<!-- TAB 1: PRODUCT -->
+<div class="panel active" id="tab-product">
+
+  <!-- No API Key warning -->
+  <div class="warn-row" id="no-key-warn" style="display:none;">
+    <span>⚠️</span>
+    <span>ยังไม่ได้ตั้งค่า Gemini API Key — กด ⚙️ เพื่อเพิ่มก่อนครับ</span>
+  </div>
+
+  <!-- Empty state -->
+  <div class="empty-state" id="empty-state">
+    <div class="empty-icon">🛍️</div>
+    <div class="empty-text">
+      เปิดหน้าสินค้า Shopee แล้วกด<br>
+      <strong style="color:var(--pn);">ดึงข้อมูลสินค้า</strong> ด้านล่างครับ
+    </div>
+  </div>
+
+  <!-- Product info -->
+  <div id="product-info" style="display:none;">
+    <div class="product-card">
+      <div id="img-wrap" class="product-img-placeholder">🛍️</div>
+      <div class="product-info">
+        <div class="product-name" id="p-name">—</div>
+        <div class="product-shop" id="p-shop"></div>
+        <div class="badges" id="p-badges"></div>
+        <div class="price-row">
+          <span class="price-sale" id="p-sale">—</span>
+          <span class="price-orig" id="p-orig"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Extra images -->
+    <div id="extra-imgs" style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;"></div>
+
+    <!-- Form -->
+    <div class="form-group">
+      <label>Commission % <span style="color:var(--text3);">(จาก Affiliate Dashboard)</span></label>
+      <input type="number" id="p-commission" placeholder="เช่น 8.5" step="0.1" />
+    </div>
+
+    <div class="form-group">
+      <label>Affiliate Link</label>
+      <input type="text" id="p-link" placeholder="https://s.shopee.co.th/..." />
+    </div>
+
+    <div class="row2">
+      <div class="form-group">
+        <label>สไตล์ Content</label>
+        <select id="p-tone">
+          <option value="review">⭐ รีวิว</option>
+          <option value="promo">🔥 โปรโมชั่น</option>
+          <option value="lifestyle">✨ Lifestyle</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Platform</label>
+        <select id="p-platform">
+          <option value="reels">🎬 Reels/Shopee VDO</option>
+          <option value="facebook">📘 Facebook</option>
+          <option value="both">✨ ทั้งคู่</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>🤖 Gemini Model (สำหรับ Generate นี้)</label>
+      <div class="model-wrap">
+        <div class="model-select-row">
+          <select id="p-model" >
+            <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite (Free · เร็ว)</option>
+            <option value="gemini-2.5-flash">gemini-2.5-flash (ดีขึ้น)</option>
+            <option value="gemini-2.5-pro">gemini-2.5-pro (คุณภาพสูง)</option>
+            <option value="custom">✏️ Custom...</option>
+          </select>
+        </div>
+        <input type="text" id="p-model-custom" placeholder="กรอก model name เช่น gemini-3.5-flash" style="display:none;margin-top:6px;" />
+      </div>
+    </div>
+  </div>
+
+  <!-- Fetch + Generate buttons -->
+  <div id="fetch-status" style="display:none;margin-bottom:8px;"></div>
+
+  <button class="btn btn-ghost" id="fetch-btn" >
+    🔍 ดึงข้อมูลสินค้า
+  </button>
+
+  <button class="btn btn-primary" id="gen-btn"  style="margin-top:6px;display:none;">
+    ✨ Generate บทพากย์
+  </button>
+
+  <div id="gen-status" style="display:none;margin-top:8px;"></div>
+</div>
+
+<!-- TAB 2: SCRIPT -->
+<div class="panel" id="tab-script">
+
+  <div class="empty-state" id="script-empty">
+    <div class="empty-icon">🎬</div>
+    <div class="empty-text">Generate บทพากย์จาก Tab สินค้าก่อนครับ</div>
+  </div>
+
+  <div id="script-output" style="display:none;">
+
+    <div class="script-section">
+      <div class="script-label">🎯 Hook</div>
+      <textarea id="out-hook" rows="2"></textarea>
+      <div class="script-actions">
+        <button class="btn-copy" id="copy-hook-btn">📋 Copy</button>
+      </div>
+    </div>
+
+    <div class="script-section">
+      <div class="script-label">🎬 Script วิดีโอ</div>
+      <textarea id="out-script" rows="5"></textarea>
+      <div class="script-actions">
+        <button class="btn-copy" id="copy-script-btn">📋 Copy</button>
+      </div>
+    </div>
+
+    <div class="script-section">
+      <div class="script-label">📝 Caption + Hashtag</div>
+      <textarea id="out-caption" rows="3"></textarea>
+      <div class="script-actions">
+        <button class="btn-copy" id="copy-caption-btn">📋 Copy</button>
+      </div>
+    </div>
+
+    <div class="script-section">
+      <div class="script-label">🎤 บทพากย์</div>
+      <textarea id="out-voice" rows="4"></textarea>
+      <div class="script-actions">
+        <button class="btn-copy" id="copy-voice-btn">📋 Copy</button>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- TTS Section -->
+    <div class="script-label" style="margin-bottom:8px;">🔊 Text-to-Speech</div>
+
+    <!-- Browser TTS -->
+    <button class="btn btn-tts" id="browser-tts-btn">
+      🔊 ฟัง Browser TTS (ฟรี)
+    </button>
+
+    <!-- ElevenLabs TTS -->
+    <button class="btn btn-eleven" id="eleven-btn"  style="margin-top:6px;">
+      🎙️ ElevenLabs TTS + Download MP3
+    </button>
+    <div id="eleven-status" style="display:none;margin-top:6px;"></div>
+    <audio id="voice-player" controls></audio>
+
+    <hr class="divider">
+
+    <!-- Actions -->
+    <button class="btn btn-ghost" id="ai-studio-btn">
+      🎙️ เปิด Google AI Studio TTS
+    </button>
+    <button class="btn btn-primary" id="video-template-btn" style="margin-top:6px;">
+      🎬 เปิด Video Template
+    </button>
+    <button class="btn btn-ghost" id="save-btn"  style="margin-top:6px;">
+      🔖 บันทึกลง Sheets
+    </button>
+
+    <button class="btn btn-ghost" id="regen-btn" style="margin-top:6px;">
+      🔄 Generate ใหม่
+    </button>
+  </div>
+</div>
+
+<div id="toast"></div>
+<script src="popup.js"></script>
+</body>
+</html>

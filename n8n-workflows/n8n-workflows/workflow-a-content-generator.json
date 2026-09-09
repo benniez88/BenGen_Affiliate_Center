@@ -1,0 +1,199 @@
+{
+  "name": "BenGen — A: Auto Content Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": { "item": [{ "mode": "everyMinute" }] },
+        "triggerOn": "rowAdded",
+        "sheetName": { "value": "Products" },
+        "options": {}
+      },
+      "id": "trigger-new-product",
+      "name": "🔔 New Product in Sheet",
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 4,
+      "position": [240, 300],
+      "credentials": { "googleSheetsOAuth2Api": { "id": "google-sheets-cred", "name": "Google Sheets" } }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "new",
+              "operator": { "type": "string", "operation": "equals" }
+            },
+            {
+              "leftValue": "={{ $json.name }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEquals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-new-status",
+      "name": "✅ Check: status=new",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// สร้าง Prompt สำหรับ Gemini\nconst item = $input.first().json;\n\nconst discount = item.discount || (item.price > item.priceSale && item.priceSale > 0\n  ? Math.round((1 - item.priceSale / item.price) * 100) : 0);\n\nconst shopTypeLabel = item.shopType === 'mall' ? ' (Shopee Mall)'\n  : item.shopType === 'preferred' ? ' (Shopee Preferred)' : '';\n\nconst prompt = `คุณเป็น Content Creator Affiliate มือโปรในไทย\n\nสินค้า: ${item.name}\nราคา: ฿${parseFloat(item.price||0).toLocaleString('th')} → ฿${parseFloat(item.priceSale||0).toLocaleString('th')}${discount > 0 ? ` (ลด ${discount}%)` : ''}\nร้าน: ${item.shopName||'-'}${shopTypeLabel}\nRating: ${item.rating||'-'} / ${item.ratingCount||0} รีวิว | ขายแล้ว ${item.sales||0} ชิ้น\nCommission: ${item.commissionRate||0}% (≈ ฿${item.commissionBaht||0} ต่อออเดอร์)\nรายละเอียด: ${(item.description||'').substring(0, 300)}\nPlatform: Shopee Video / Reels (25-30 วิ)\n\nสร้างครบ 4 ส่วน (ใช้ Emoji นำหน้าตามนี้เท่านั้น):\n\n🎯 HOOK\n(1 บรรทัด ดึงใจใน 3 วิแรก)\n\n🎬 SCRIPT\n(แบ่ง timestamp ชัดเจน รวม 25-30 วิ)\n\n📝 CAPTION\n(โพสต์ + emoji + hashtag ภาษาไทย)\n\n🎤 บทพากย์\n(อ่านออกเสียง 25-30 วิ ภาษาไทยเป็นธรรมชาติ)`;\n\nreturn [{ json: { ...item, prompt, discount } }];"
+      },
+      "id": "build-prompt",
+      "name": "📝 Build Gemini Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key={{ $vars.GEMINI_API_KEY }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/json" }]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "contents",
+              "value": "=[{\"parts\":[{\"text\": \"{{ $json.prompt }}\"}]}]"
+            },
+            {
+              "name": "generationConfig",
+              "value": "={\"temperature\": 0.85, \"maxOutputTokens\": 1400}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "call-gemini",
+      "name": "🤖 Call Gemini API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 220]
+    },
+    {
+      "parameters": {
+        "jsCode": "// แยก Output จาก Gemini เป็น 4 ส่วน\nconst prev  = $('Build Gemini Prompt').first().json;\nconst text  = $input.first().json.candidates?.[0]?.content?.parts?.[0]?.text || '';\n\nconst get = (emoji, nextEmoji) => {\n  const rx = new RegExp(emoji + '[^\\\\n]*\\\\n([\\\\s\\\\S]*?)(?=' + nextEmoji + '|$)', 'i');\n  return (text.match(rx)?.[1] || '').trim();\n};\n\nconst hook       = get('🎯', '🎬');\nconst script     = get('🎬', '📝');\nconst caption    = get('📝', '🎤');\nconst voiceScript = get('🎤', '\\\\$\\\\$\\\\$');\nconst charCount  = voiceScript.length;\n\nreturn [{\n  json: {\n    ...prev,\n    hook, script, caption, voiceScript, charCount,\n    rawGemini: text\n  }\n}];"
+      },
+      "id": "parse-gemini",
+      "name": "🔍 Parse Gemini Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.APPS_SCRIPT_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/json" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"action\": \"saveContent\",\n  \"data\": {\n    \"productId\": \"{{ $json.id }}\",\n    \"productName\": \"{{ $json.name }}\",\n    \"hook\": {{ JSON.stringify($json.hook) }},\n    \"script\": {{ JSON.stringify($json.script) }},\n    \"caption\": {{ JSON.stringify($json.caption) }},\n    \"voiceScript\": {{ JSON.stringify($json.voiceScript) }},\n    \"charCount\": {{ $json.charCount }}\n  }\n}",
+        "options": {}
+      },
+      "id": "save-content-sheet",
+      "name": "💾 Save Content → Sheet",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.APPS_SCRIPT_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/json" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"action\": \"updateStatus\",\n  \"sheet\": \"Products\",\n  \"id\": \"{{ $('Parse Gemini Output').first().json.id }}\",\n  \"field\": \"status\",\n  \"value\": \"content_ready\"\n}",
+        "options": {}
+      },
+      "id": "update-product-status",
+      "name": "🔄 Update Product Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1680, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.APPS_SCRIPT_URL }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/json" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"action\": \"updateStatus\",\n  \"sheet\": \"Products\",\n  \"id\": \"{{ $('Build Gemini Prompt').first().json.id }}\",\n  \"field\": \"status\",\n  \"value\": \"gemini_error\"\n}",
+        "options": {}
+      },
+      "id": "update-error-status",
+      "name": "❌ Mark Error Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 460]
+    },
+    {
+      "parameters": {
+        "jsCode": "// สรุปผลลัพธ์\nconst p = $('Parse Gemini Output').first().json;\nconst s = $input.first().json;\n\nconsole.log('✅ Content saved for:', p.name);\nconsole.log('Content ID:', s.id || s.contentId);\nconsole.log('Char count:', p.charCount, '/ 10,000');\n\nreturn [{ json: {\n  productId:   p.id,\n  productName: p.name,\n  contentId:   s.id || s.contentId,\n  charCount:   p.charCount,\n  driveFolderUrl: p.driveFolderUrl || '',\n  completedAt: new Date().toISOString()\n}}];"
+      },
+      "id": "log-success",
+      "name": "📊 Log Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1920, 220]
+    }
+  ],
+  "connections": {
+    "🔔 New Product in Sheet": {
+      "main": [[{ "node": "✅ Check: status=new", "type": "main", "index": 0 }]]
+    },
+    "✅ Check: status=new": {
+      "main": [
+        [{ "node": "📝 Build Gemini Prompt", "type": "main", "index": 0 }],
+        []
+      ]
+    },
+    "📝 Build Gemini Prompt": {
+      "main": [[{ "node": "🤖 Call Gemini API", "type": "main", "index": 0 }]]
+    },
+    "🤖 Call Gemini API": {
+      "main": [
+        [{ "node": "🔍 Parse Gemini Output", "type": "main", "index": 0 }],
+        [{ "node": "❌ Mark Error Status", "type": "main", "index": 0 }]
+      ]
+    },
+    "🔍 Parse Gemini Output": {
+      "main": [[{ "node": "💾 Save Content → Sheet", "type": "main", "index": 0 }]]
+    },
+    "💾 Save Content → Sheet": {
+      "main": [[{ "node": "🔄 Update Product Status", "type": "main", "index": 0 }]]
+    },
+    "🔄 Update Product Status": {
+      "main": [[{ "node": "📊 Log Success", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": ""
+  },
+  "staticData": null,
+  "meta": { "templateCredsSetupCompleted": true },
+  "pinData": {},
+  "versionId": "bengen-v3-workflow-a",
+  "triggerCount": 0,
+  "tags": [{ "name": "BenGen" }]
+}

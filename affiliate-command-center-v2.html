@@ -1,0 +1,2337 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Affiliate Command Center</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0A0F1E;
+    --bg2: #111827;
+    --bg3: #1F2937;
+    --border: #374151;
+    --accent: #F59E0B;
+    --accent2: #D97706;
+    --accent-dim: rgba(245,158,11,0.12);
+    --text: #F9FAFB;
+    --text2: #9CA3AF;
+    --text3: #6B7280;
+    --green: #10B981;
+    --red: #EF4444;
+    --blue: #3B82F6;
+    --purple: #8B5CF6;
+    --radius: 10px;
+    --font: 'Inter', 'Sarabun', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); background: var(--bg); color: var(--text); display: flex; height: 100vh; overflow: hidden; }
+
+  /* SIDEBAR */
+  #sidebar { width: 220px; flex-shrink: 0; background: var(--bg2); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 20px 0; }
+  .logo { padding: 0 20px 20px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+  .logo-title { font-size: 13px; font-weight: 700; color: var(--accent); }
+  .logo-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 20px; cursor: pointer; font-size: 13px; color: var(--text2); transition: all 0.15s; border-left: 3px solid transparent; }
+  .nav-item:hover { background: var(--bg3); color: var(--text); }
+  .nav-item.active { background: var(--accent-dim); color: var(--accent); border-left-color: var(--accent); font-weight: 600; }
+  .nav-icon { font-size: 16px; width: 20px; text-align: center; }
+  .nav-section { font-size: 10px; font-weight: 600; color: var(--text3); padding: 14px 20px 6px; letter-spacing: 0.8px; text-transform: uppercase; }
+  .sidebar-footer { margin-top: auto; padding: 16px 20px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; }
+  .credit-bar-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--text3); margin-bottom: 4px; }
+  .credit-bar { height: 4px; background: var(--bg3); border-radius: 2px; overflow: hidden; }
+  .credit-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s; }
+
+  /* SYNC STATUS */
+  .sync-status { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text3); }
+  .sync-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text3); flex-shrink: 0; }
+  .sync-dot.synced { background: var(--green); }
+  .sync-dot.syncing { background: var(--accent); animation: pulse 1s infinite; }
+  .sync-dot.error { background: var(--red); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  /* MAIN */
+  #main { flex: 1; overflow-y: auto; padding: 28px 32px; display: flex; flex-direction: column; gap: 20px; }
+  .page { display: none; flex-direction: column; gap: 20px; }
+  .page.active { display: flex; }
+  .page-header { margin-bottom: 4px; }
+  .page-title { font-size: 20px; font-weight: 700; }
+  .page-desc { font-size: 13px; color: var(--text2); margin-top: 4px; }
+
+  /* CARDS */
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+  .card-sm { padding: 14px 16px; }
+
+  /* FORM */
+  label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 5px; }
+  input, select, textarea { width: 100%; background: var(--bg3); border: 1px solid var(--border); border-radius: 7px; color: var(--text); font-family: var(--font); font-size: 13px; padding: 8px 12px; outline: none; transition: border-color 0.15s; }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 80px; }
+  input[type="password"] { letter-spacing: 2px; }
+
+  /* BUTTONS */
+  .btn { display: inline-flex; align-items: center; gap: 7px; padding: 9px 18px; border-radius: 7px; font-family: var(--font); font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: all 0.15s; }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-primary:hover { background: var(--accent2); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-ghost { background: var(--bg3); color: var(--text); border: 1px solid var(--border); }
+  .btn-ghost:hover { background: var(--border); }
+  .btn-sm { padding: 6px 12px; font-size: 12px; }
+  .btn-green { background: var(--green); color: #fff; }
+  .btn-red { background: var(--red); color: #fff; }
+  .btn-red:hover { background: #DC2626; }
+
+  /* LAYOUT */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .row { display: flex; gap: 12px; align-items: center; }
+  .row-between { display: flex; justify-content: space-between; align-items: center; }
+  .gap-8 { gap: 8px; }
+  .mt-4 { margin-top: 4px; }
+  .mt-8 { margin-top: 8px; }
+  .mt-12 { margin-top: 12px; }
+  .mt-16 { margin-top: 16px; }
+  .mb-12 { margin-bottom: 12px; }
+  .full-width { width: 100%; }
+  .divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+
+  /* PRODUCT GRID */
+  .product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+
+  .product-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+  }
+  .product-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  }
+  .product-card.selected { border-color: var(--accent); background: var(--accent-dim); }
+
+  /* IMAGE AREA */
+  .product-img-wrap {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    background: var(--bg3);
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .product-img-wrap img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s;
+  }
+  .product-card:hover .product-img-wrap img { transform: scale(1.04); }
+
+  /* PLACEHOLDER IMAGE */
+  .product-img-placeholder {
+    width: 100%; height: 100%;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 8px;
+    background: linear-gradient(135deg, #1a2035 0%, #1f2a42 50%, #162032 100%);
+  }
+  .product-img-placeholder .placeholder-icon { font-size: 44px; opacity: 0.5; }
+  .product-img-placeholder .placeholder-text { font-size: 10px; color: var(--text3); letter-spacing: 0.5px; }
+
+  /* DISCOUNT RIBBON */
+  .discount-ribbon {
+    position: absolute;
+    top: 10px; left: 10px;
+    background: var(--red);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 5px;
+    letter-spacing: 0.3px;
+  }
+
+  /* COMMISSION TAG (top-right) */
+  .commission-tag {
+    position: absolute;
+    top: 10px; right: 10px;
+    background: rgba(16,185,129,0.9);
+    backdrop-filter: blur(4px);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 5px;
+  }
+
+  /* PRODUCT BODY */
+  .product-body { padding: 14px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+
+  .product-name {
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.45;
+    color: var(--text);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    min-height: 38px;
+  }
+
+  /* SHOP ROW */
+  .product-shop {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--text3);
+  }
+  .shop-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--blue);
+    flex-shrink: 0;
+  }
+
+  /* PRICE ROW */
+  .product-price-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .price-sale {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .price-original {
+    font-size: 12px;
+    color: var(--text3);
+    text-decoration: line-through;
+  }
+
+  /* COMMISSION ROW */
+  .product-commission-row {
+    background: rgba(16,185,129,0.08);
+    border: 1px solid rgba(16,185,129,0.2);
+    border-radius: 7px;
+    padding: 8px 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .commission-label { font-size: 11px; color: var(--text3); }
+  .commission-value { font-size: 13px; font-weight: 700; color: var(--green); }
+  .commission-est { font-size: 11px; color: var(--text2); }
+
+  /* STATS ROW */
+  .product-stats-row {
+    display: flex;
+    gap: 12px;
+    font-size: 11px;
+    color: var(--text3);
+    padding-top: 2px;
+    border-top: 1px solid var(--border);
+  }
+  .stat-item { display: flex; align-items: center; gap: 4px; }
+
+  /* ACTION BUTTONS */
+  .product-actions { display: flex; gap: 8px; }
+  .btn-content { flex: 1; background: var(--accent); color: #000; font-size: 12px; font-weight: 700; }
+  .btn-content:hover { background: var(--accent2); }
+  .btn-bookmark { background: var(--bg3); border: 1px solid var(--border); color: var(--text2); font-size: 12px; }
+  .btn-bookmark:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* FILTER BAR */
+  .filter-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .filter-bar input { flex: 1; min-width: 200px; }
+
+  /* PLATFORM TABS */
+  .platform-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+  .platform-tab { padding: 8px 16px; border-radius: 7px; font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid var(--border); background: var(--bg3); color: var(--text2); transition: all 0.15s; }
+  .platform-tab.active { border-color: var(--accent); background: var(--accent-dim); color: var(--accent); }
+
+  /* CONTENT OUTPUT */
+  .content-output { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; min-height: 180px; font-size: 14px; line-height: 1.7; white-space: pre-wrap; position: relative; }
+  .content-placeholder { color: var(--text3); font-size: 13px; text-align: center; padding: 40px 0; }
+
+  /* PROMPT BOX */
+  .prompt-box { background: var(--bg); border: 1px dashed var(--border); border-radius: var(--radius); padding: 16px; position: relative; }
+  .prompt-box-label { font-size: 10px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; }
+  .prompt-box p { font-size: 13px; line-height: 1.6; color: var(--text2); }
+  .copy-btn-abs { position: absolute; top: 10px; right: 10px; }
+
+  /* PLANNER */
+  .calendar-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; }
+  .day-col { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); min-height: 160px; overflow: hidden; }
+  .day-header { padding: 8px 10px; font-size: 11px; font-weight: 600; color: var(--text2); border-bottom: 1px solid var(--border); text-align: center; }
+  .day-header.today { color: var(--accent); }
+  .day-date { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+  .day-slots { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .plan-slot { background: var(--bg3); border-radius: 6px; padding: 7px 9px; font-size: 11px; cursor: pointer; border-left: 3px solid var(--blue); transition: opacity 0.15s; }
+  .plan-slot:hover { opacity: 0.8; }
+  .plan-slot.posted { border-left-color: var(--green); }
+  .plan-slot.draft { border-left-color: var(--accent); }
+  .plan-slot-title { font-weight: 600; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .plan-slot-meta { color: var(--text3); }
+
+  /* TRACKER */
+  .stat-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; }
+  .stat-label { font-size: 12px; color: var(--text3); margin-bottom: 8px; }
+  .stat-value { font-size: 26px; font-weight: 700; }
+  .stat-sub { font-size: 11px; color: var(--text2); margin-top: 4px; }
+  .stat-value.green { color: var(--green); }
+  .stat-value.amber { color: var(--accent); }
+  .stat-value.blue { color: var(--blue); }
+
+  /* TABLE */
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  td { padding: 11px 14px; font-size: 13px; border-bottom: 1px solid rgba(55,65,81,0.5); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--bg3); }
+
+  /* BADGES */
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .badge-green { background: rgba(16,185,129,0.15); color: var(--green); }
+  .badge-amber { background: rgba(245,158,11,0.15); color: var(--accent); }
+  .badge-blue { background: rgba(59,130,246,0.15); color: var(--blue); }
+  .badge-red { background: rgba(239,68,68,0.15); color: var(--red); }
+  .badge-purple { background: rgba(139,92,246,0.15); color: var(--purple); }
+
+  /* CHART */
+  .chart-wrap { position: relative; height: 120px; display: flex; align-items: flex-end; gap: 6px; padding: 8px 0; }
+  .bar { flex: 1; background: var(--accent); border-radius: 4px 4px 0 0; opacity: 0.8; transition: opacity 0.15s; position: relative; min-height: 4px; }
+  .bar:hover { opacity: 1; }
+  .bar-label { position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%); font-size: 10px; color: var(--text3); white-space: nowrap; }
+
+  /* PROGRESS */
+  .progress-wrap { background: var(--bg3); border-radius: 4px; height: 6px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--accent); border-radius: 4px; transition: width 0.3s; }
+
+  /* INFO BANNERS */
+  .info-row { display: flex; gap: 6px; align-items: flex-start; font-size: 12px; color: var(--text2); background: rgba(59,130,246,0.08); border: 1px solid rgba(59,130,246,0.2); border-radius: 7px; padding: 10px 12px; }
+  .warn-row { display: flex; gap: 6px; align-items: flex-start; font-size: 12px; color: var(--text2); background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2); border-radius: 7px; padding: 10px 12px; }
+  .success-row { display: flex; gap: 6px; align-items: flex-start; font-size: 12px; color: var(--text2); background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); border-radius: 7px; padding: 10px 12px; }
+  .error-row { display: flex; gap: 6px; align-items: flex-start; font-size: 12px; color: var(--text2); background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); border-radius: 7px; padding: 10px 12px; }
+
+  /* MODAL */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 1000; align-items: center; justify-content: center; }
+  .modal-overlay.show { display: flex; }
+  .modal { background: var(--bg2); border: 1px solid var(--border); border-radius: 14px; padding: 28px; width: 500px; max-width: 95vw; max-height: 85vh; overflow-y: auto; }
+  .modal-title { font-size: 16px; font-weight: 700; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+  /* LOADING */
+  .loading { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .skeleton { background: linear-gradient(90deg, var(--bg3) 25%, var(--bg2) 50%, var(--bg3) 75%); background-size: 200% 100%; animation: shimmer 1.2s infinite; border-radius: 6px; }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+  /* EMPTY STATE */
+  .empty-state { text-align: center; padding: 48px 24px; color: var(--text3); }
+  .empty-state .empty-icon { font-size: 40px; margin-bottom: 12px; }
+  .empty-state p { font-size: 13px; }
+
+  /* SETTINGS PANEL */
+  .settings-panel { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+  .settings-panel h3 { font-size: 12px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 14px; }
+
+  /* TOAST */
+  #toast { position: fixed; bottom: 24px; right: 24px; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 18px; font-size: 13px; z-index: 9999; opacity: 0; transform: translateY(10px); transition: all 0.25s; pointer-events: none; max-width: 340px; }
+  #toast.show { opacity: 1; transform: translateY(0); }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* SHEETS INDICATOR */
+  .sheets-badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; background: rgba(16,185,129,0.12); color: var(--green); border: 1px solid rgba(16,185,129,0.25); }
+  .sheets-badge.disconnected { background: rgba(107,114,128,0.12); color: var(--text3); border-color: var(--border); }
+  .sheets-badge.syncing { background: rgba(245,158,11,0.12); color: var(--accent); border-color: rgba(245,158,11,0.25); }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<nav id="sidebar">
+  <div class="logo">
+    <div class="logo-title">⚡ AFFILIATE HQ</div>
+    <div class="logo-sub">v2.0 · Sheets Sync</div>
+  </div>
+
+  <div class="nav-section">Modules</div>
+  <div class="nav-item active" onclick="showPage('m1')"><span class="nav-icon">🛍️</span> Product Input</div>
+  <div class="nav-item" onclick="showPage('m2')"><span class="nav-icon">✍️</span> Content Studio</div>
+  <div class="nav-item" onclick="showPage('m3')"><span class="nav-icon">📅</span> Post Planner</div>
+  <div class="nav-item" onclick="showPage('m4')"><span class="nav-icon">📊</span> Performance</div>
+
+  <div class="nav-section">System</div>
+  <div class="nav-item" onclick="showPage('settings')"><span class="nav-icon">⚙️</span> Settings</div>
+
+  <div class="sidebar-footer">
+    <!-- Sync Status -->
+    <div class="sync-status">
+      <div class="sync-dot" id="sync-dot"></div>
+      <span id="sync-label">ไม่ได้เชื่อมต่อ Sheets</span>
+    </div>
+    <button class="btn btn-ghost btn-sm full-width" onclick="manualSync()" id="sync-btn">
+      🔄 Sync ตอนนี้
+    </button>
+
+    <!-- Credit Bar -->
+    <div>
+      <div class="credit-bar-label">
+        <span>Flow Credits</span>
+        <span id="credit-display">— / 1000</span>
+      </div>
+      <div class="credit-bar">
+        <div class="credit-fill" id="credit-fill" style="width:0%"></div>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<main id="main">
+
+  <!-- ═══ MODULE 1: PRODUCT INPUT ═══ -->
+  <div class="page active" id="page-m1">
+    <div class="page-header">
+      <div class="page-title">🛍️ Product Input</div>
+      <div class="page-desc">วาง Shopee Affiliate Link → ดึงข้อมูล + สร้างบทพากย์อัตโนมัติ → ต่อยอดทำวิดีโอ</div>
+    </div>
+
+    <!-- URL Input -->
+    <div class="card">
+      <div style="font-size:13px;font-weight:600;margin-bottom:14px;">🔗 วาง Shopee Affiliate Link</div>
+      <div class="row" style="gap:10px;">
+        <input type="text" id="shopee-url-input"
+          placeholder="https://s.shopee.co.th/... หรือ https://shopee.co.th/..."
+          style="flex:1;"
+          onkeydown="if(event.key==='Enter') fetchProductInfo()" />
+        <button class="btn btn-primary" onclick="fetchProductInfo()" id="fetch-btn" style="white-space:nowrap;">
+          <span id="fetch-btn-text">🔍 ดึงข้อมูล</span>
+        </button>
+      </div>
+      <!-- Fetch Status -->
+      <div id="fetch-status" style="display:none;" class="info-row mt-8"></div>
+
+      <!-- Platform + Tone selector (ก่อน generate) -->
+      <div class="two-col mt-12">
+        <div>
+          <label>Platform</label>
+          <select id="p-platform" class="mt-4">
+            <option value="reels">🎬 Reels / Shopee Video</option>
+            <option value="facebook">📘 Facebook Page</option>
+            <option value="both">✨ ทั้งคู่</option>
+          </select>
+        </div>
+        <div>
+          <label>สไตล์ Content</label>
+          <select id="p-tone" class="mt-4">
+            <option value="review">⭐ รีวิว</option>
+            <option value="promo">🔥 โปรโมชั่น</option>
+            <option value="lifestyle">✨ Lifestyle</option>
+          </select>
+        </div>
+      </div>
+      <div class="info-row mt-12">
+        <span>💡</span>
+        <span>รองรับ Short Link <code style="background:var(--bg3);padding:1px 5px;border-radius:3px;font-size:11px;">s.shopee.co.th/xxx</code> และลิงก์เต็มจากหน้าสินค้าได้เลยครับ</span>
+      </div>
+    </div>
+
+    <!-- Product Preview -->
+    <div id="product-preview" style="display:none;">
+      <div class="two-col" style="align-items:start;">
+
+        <!-- Left: Product Card -->
+        <div class="card" style="display:flex;flex-direction:column;gap:14px;">
+          <div style="font-size:13px;font-weight:600;">ข้อมูลสินค้า</div>
+
+          <div style="display:flex;gap:14px;align-items:flex-start;">
+            <div id="p-img-wrap" style="width:100px;height:100px;border-radius:8px;overflow:hidden;background:var(--bg3);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:36px;">🛍️</div>
+            <div style="flex:1;min-width:0;">
+              <div id="p-name" style="font-size:14px;font-weight:600;line-height:1.5;margin-bottom:8px;"></div>
+              <div id="p-shop" style="font-size:12px;color:var(--text2);margin-bottom:6px;"></div>
+              <div id="p-badges" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+            </div>
+          </div>
+
+          <!-- Price -->
+          <div style="background:var(--bg3);border-radius:8px;padding:12px;display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <div style="font-size:11px;color:var(--text3);margin-bottom:3px;">ราคา</div>
+              <div style="display:flex;align-items:baseline;gap:8px;">
+                <span id="p-price-sale" style="font-size:20px;font-weight:700;color:var(--accent);"></span>
+                <span id="p-price-orig" style="font-size:13px;color:var(--text3);text-decoration:line-through;"></span>
+              </div>
+            </div>
+            <div id="p-discount" style="background:var(--red);color:#fff;font-size:12px;font-weight:700;padding:4px 10px;border-radius:6px;display:none;"></div>
+          </div>
+
+          <!-- Editable Fields -->
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div>
+              <label>ชื่อสินค้า (แก้ไขได้)</label>
+              <input type="text" id="p-name-edit" />
+            </div>
+            <div class="two-col">
+              <div><label>ราคาปกติ</label><input type="number" id="p-price-edit" /></div>
+              <div><label>ราคาลด</label><input type="number" id="p-sale-edit" /></div>
+            </div>
+            <div>
+              <label>Commission % <span style="color:var(--text3);font-weight:400;">(จาก Affiliate Dashboard)</span></label>
+              <input type="number" id="p-commission-edit" placeholder="เช่น 8.5" step="0.1" />
+            </div>
+            <div>
+              <label>Affiliate Link</label>
+              <input type="text" id="p-affiliate-link" placeholder="https://s.shopee.co.th/..." />
+            </div>
+            <div>
+              <label>รายละเอียด / จุดเด่น</label>
+              <textarea id="p-highlights" style="min-height:60px;"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Script Output + Actions -->
+        <div style="display:flex;flex-direction:column;gap:14px;">
+
+          <!-- Script Status -->
+          <div id="script-status" style="display:none;" class="info-row"></div>
+
+          <!-- Auto Script Output -->
+          <div id="auto-script-output" style="display:none;" class="card">
+            <div style="font-size:13px;font-weight:600;margin-bottom:12px;">🤖 บทพากย์จาก Gemini</div>
+
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <div>
+                <label>🎯 Hook</label>
+                <textarea id="script-hook" style="min-height:48px;font-size:13px;"></textarea>
+              </div>
+              <div>
+                <label>🎬 Script วิดีโอ</label>
+                <textarea id="script-body" style="min-height:120px;font-size:12px;"></textarea>
+              </div>
+              <div>
+                <label>📝 Caption + Hashtag</label>
+                <textarea id="script-caption" style="min-height:80px;font-size:12px;"></textarea>
+              </div>
+              <div>
+                <label>🎤 บทพากย์ (สำหรับ Google AI Studio TTS)</label>
+                <textarea id="script-voice" style="min-height:100px;font-size:13px;line-height:1.6;"></textarea>
+              </div>
+            </div>
+
+            <div class="row mt-12" style="gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+              <button class="btn btn-ghost btn-sm" onclick="copyVoiceScript()">📋 Copy บทพากย์</button>
+              <button class="btn btn-ghost btn-sm" onclick="window.open('https://aistudio.google.com/app/speech','_blank')">🎙️ เปิด AI Studio TTS</button>
+              <button class="btn btn-ghost btn-sm" onclick="reGenerateScript()">🔄 Generate ใหม่</button>
+            </div>
+
+            <div class="warn-row mt-8">
+              <span>💡</span>
+              <span>Copy บทพากย์ → เปิด Google AI Studio → Text to Speech → Paste → Download MP3 → นำมาใส่ใน Video Template</span>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="card" style="display:flex;flex-direction:column;gap:10px;">
+            <div style="font-size:13px;font-weight:600;margin-bottom:2px;">🚀 ขั้นตอนต่อไป</div>
+            <button class="btn btn-primary full-width" onclick="sendToVideoTemplate()" style="justify-content:center;">
+              🎬 ส่งไป Video Template
+            </button>
+            <button class="btn btn-ghost full-width" onclick="sendProductToContentStudio()" style="justify-content:center;">
+              ✍️ ส่งไป Content Studio
+            </button>
+            <button class="btn btn-ghost full-width" onclick="saveProductToSheets()" style="justify-content:center;" id="save-product-btn">
+              🔖 บันทึกลง Sheets
+            </button>
+            <button class="btn btn-ghost full-width" onclick="addToPlanner()" style="justify-content:center;">
+              📅 เพิ่มลง Planner
+            </button>
+          </div>
+
+          <!-- Saved Products -->
+          <div class="card">
+            <div class="row-between mb-12">
+              <span style="font-size:13px;font-weight:600;">สินค้าที่บันทึกไว้</span>
+              <button class="btn btn-ghost btn-sm" onclick="loadSavedProducts()">🔄 โหลด</button>
+            </div>
+            <div id="saved-products-list">
+              <div style="font-size:12px;color:var(--text3);text-align:center;padding:16px 0;">กด "โหลด" เพื่อดูสินค้าจาก Sheets</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Products -->
+    <div class="card" id="recent-products-card">
+      <div class="row-between mb-12">
+        <span style="font-size:13px;font-weight:600;">สินค้าล่าสุดจาก Sheets</span>
+        <button class="btn btn-ghost btn-sm" onclick="loadSavedProducts()">🔄 โหลด</button>
+      </div>
+      <div id="recent-products-wrap">
+        <div class="empty-state" style="padding:24px;">
+          <div class="empty-icon">🛍️</div>
+          <p>วาง Affiliate Link ด้านบนเพื่อเริ่มต้น<br>หรือกด "โหลด" เพื่อดูสินค้าที่บันทึกไว้</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+    <!-- Product Preview -->
+    <div id="product-preview" style="display:none;">
+      <div class="two-col" style="align-items:start;">
+
+        <!-- Left: Product Card -->
+        <div class="card" style="display:flex;flex-direction:column;gap:14px;">
+          <div style="font-size:13px;font-weight:600;">ข้อมูลสินค้า</div>
+
+          <!-- Image + Name -->
+          <div style="display:flex;gap:14px;align-items:flex-start;">
+            <div id="p-img-wrap" style="width:100px;height:100px;border-radius:8px;overflow:hidden;background:var(--bg3);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:36px;">🛍️</div>
+            <div style="flex:1;min-width:0;">
+              <div id="p-name" style="font-size:14px;font-weight:600;line-height:1.5;margin-bottom:8px;"></div>
+              <div id="p-shop" style="font-size:12px;color:var(--text2);margin-bottom:6px;"></div>
+              <div id="p-badges" style="display:flex;gap:6px;flex-wrap:wrap;"></div>
+            </div>
+          </div>
+
+          <!-- Price Row -->
+          <div style="background:var(--bg3);border-radius:8px;padding:12px;display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <div style="font-size:11px;color:var(--text3);margin-bottom:3px;">ราคา</div>
+              <div style="display:flex;align-items:baseline;gap:8px;">
+                <span id="p-price-sale" style="font-size:20px;font-weight:700;color:var(--accent);"></span>
+                <span id="p-price-orig" style="font-size:13px;color:var(--text3);text-decoration:line-through;"></span>
+              </div>
+            </div>
+            <div id="p-discount" style="background:var(--red);color:#fff;font-size:12px;font-weight:700;padding:4px 10px;border-radius:6px;display:none;"></div>
+          </div>
+
+          <!-- Editable Fields -->
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div>
+              <label>ชื่อสินค้า (แก้ไขได้)</label>
+              <input type="text" id="p-name-edit" />
+            </div>
+            <div class="two-col">
+              <div>
+                <label>ราคาปกติ (บาท)</label>
+                <input type="number" id="p-price-edit" />
+              </div>
+              <div>
+                <label>ราคาลด (บาท)</label>
+                <input type="number" id="p-sale-edit" />
+              </div>
+            </div>
+            <div>
+              <label>Commission % <span style="color:var(--text3);font-weight:400;">(กรอกจาก Affiliate Dashboard)</span></label>
+              <input type="number" id="p-commission-edit" placeholder="เช่น 8.5" step="0.1" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Affiliate Link + Actions -->
+        <div style="display:flex;flex-direction:column;gap:14px;">
+
+          <!-- Affiliate Link Box -->
+          <div class="card" style="display:flex;flex-direction:column;gap:12px;">
+            <div style="font-size:13px;font-weight:600;">Affiliate Link</div>
+            <div class="warn-row">
+              <span>📋</span>
+              <div>
+                เปิด <strong>Shopee Affiliate Dashboard</strong> → ค้นหาสินค้านี้ → Copy Link แล้วนำมาวางด้านล่าง
+                <br><a href="https://affiliate.shopee.co.th" target="_blank" style="color:var(--accent);font-size:11px;margin-top:4px;display:inline-block;">เปิด Dashboard →</a>
+              </div>
+            </div>
+            <div>
+              <label>วาง Affiliate Link ที่นี่</label>
+              <input type="text" id="p-affiliate-link" placeholder="https://s.shopee.co.th/..." />
+            </div>
+            <div>
+              <label>จุดเด่นสินค้า (ช่วย AI สร้าง Content ได้ดีขึ้น)</label>
+              <textarea id="p-highlights" placeholder="เช่น กันน้ำ PA+++ ผิวแพ้ง่ายใช้ได้ ขายดีอันดับ 1..." style="min-height:70px;"></textarea>
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="card" style="display:flex;flex-direction:column;gap:10px;">
+            <div style="font-size:13px;font-weight:600;margin-bottom:2px;">ขั้นตอนต่อไป</div>
+            <button class="btn btn-primary full-width" onclick="sendProductToContentStudio()" style="justify-content:center;">
+              ✍️ สร้าง Content สำหรับสินค้านี้
+            </button>
+            <button class="btn btn-ghost full-width" onclick="saveProductToSheets()" style="justify-content:center;" id="save-product-btn">
+              🔖 บันทึกสินค้าลง Sheets
+            </button>
+            <button class="btn btn-ghost full-width" onclick="addToPlanner()" style="justify-content:center;">
+              📅 เพิ่มลง Post Planner
+            </button>
+          </div>
+
+          <!-- Saved Products List -->
+          <div class="card">
+            <div class="row-between mb-12">
+              <span style="font-size:13px;font-weight:600;">สินค้าที่บันทึกไว้</span>
+              <button class="btn btn-ghost btn-sm" onclick="loadSavedProducts()">🔄 โหลด</button>
+            </div>
+            <div id="saved-products-list">
+              <div style="font-size:12px;color:var(--text3);text-align:center;padding:16px 0;">กด "โหลด" เพื่อดูสินค้าที่บันทึกไว้ใน Sheets</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Products (from Sheets) -->
+    <div class="card" id="recent-products-card">
+      <div class="row-between mb-12">
+        <span style="font-size:13px;font-weight:600;">สินค้าล่าสุดจาก Sheets</span>
+        <button class="btn btn-ghost btn-sm" onclick="loadSavedProducts()">🔄 โหลดจาก Sheets</button>
+      </div>
+      <div id="recent-products-wrap">
+        <div class="empty-state" style="padding:24px;">
+          <div class="empty-icon">🛍️</div>
+          <p>วาง Shopee URL ด้านบนเพื่อเพิ่มสินค้า<br>หรือกด "โหลดจาก Sheets" เพื่อดูสินค้าที่บันทึกไว้</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MODULE 2: CONTENT STUDIO ═══ -->
+  <div class="page" id="page-m2">
+    <div class="page-header">
+      <div class="page-title">✍️ Content Studio</div>
+      <div class="page-desc">สร้าง Script, Caption และ Video Prompt · บันทึก Content ทุกชิ้นลง Sheets อัตโนมัติ</div>
+    </div>
+
+    <div class="two-col">
+      <div style="display:flex; flex-direction:column; gap:14px;">
+        <div class="card">
+          <div class="row-between mb-12">
+            <span style="font-size:13px; font-weight:600;">สินค้าที่เลือก</span>
+            <button class="btn btn-ghost btn-sm" onclick="showPage('m1')">+ เลือกจาก Product Input</button>
+          </div>
+          <div id="m2-product-display">
+            <div class="info-row"><span>ℹ️</span><span>เลือกสินค้าจาก Product Finder หรือกรอกเอง</span></div>
+          </div>
+          <hr class="divider">
+          <div style="display:flex; flex-direction:column; gap:10px;">
+            <div><label>ชื่อสินค้า</label><input type="text" id="m2-product-name" placeholder="เช่น ครีมกันแดด SPF50+" /></div>
+            <div class="two-col">
+              <div><label>ราคาปกติ (บาท)</label><input type="number" id="m2-price" placeholder="490" /></div>
+              <div><label>ราคาลด (บาท)</label><input type="number" id="m2-price-sale" placeholder="299" /></div>
+            </div>
+            <div><label>Commission (%)</label><input type="number" id="m2-commission" placeholder="8.5" /></div>
+            <div><label>Affiliate Link</label><input type="text" id="m2-affiliate-link" placeholder="https://s.shopee.co.th/..." /></div>
+            <div><label>จุดเด่นของสินค้า</label><textarea id="m2-highlights" placeholder="เช่น กันน้ำ PA+++ เหมาะผิวแพ้ง่าย..."></textarea></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div style="font-size:13px; font-weight:600; margin-bottom:12px;">Platform & สไตล์</div>
+          <label>Platform</label>
+          <div class="platform-tabs mt-4 mb-12">
+            <div class="platform-tab active" data-platform="reels" onclick="selectPlatform(this)">🎬 Reels / Shopee Video</div>
+            <div class="platform-tab" data-platform="facebook" onclick="selectPlatform(this)">📘 Facebook Page</div>
+            <div class="platform-tab" data-platform="both" onclick="selectPlatform(this)">✨ ทั้งคู่</div>
+          </div>
+          <label>สไตล์ Content</label>
+          <div class="platform-tabs mt-4 mb-12">
+            <div class="platform-tab active" data-tone="review" onclick="selectTone(this)">⭐ รีวิว</div>
+            <div class="platform-tab" data-tone="promo" onclick="selectTone(this)">🔥 โปรโมชั่น</div>
+            <div class="platform-tab" data-tone="lifestyle" onclick="selectTone(this)">✨ Lifestyle</div>
+          </div>
+          <label>ภาษา</label>
+          <select id="m2-lang" class="mt-4">
+            <option value="th">ภาษาไทย</option>
+            <option value="en">English</option>
+            <option value="both">ไทย + อังกฤษ</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:14px;">
+        <div class="card">
+          <div class="row-between mb-12">
+            <span style="font-size:13px; font-weight:600;">Content ที่สร้าง</span>
+            <button class="btn btn-primary" id="gen-btn" onclick="generateContent()">
+              <span id="gen-btn-text">⚡ Generate</span>
+            </button>
+          </div>
+          <div id="content-output" class="content-output">
+            <div class="content-placeholder">กรอกข้อมูลสินค้าและกด Generate</div>
+          </div>
+          <div class="row mt-12" style="justify-content:flex-end; gap:8px;">
+            <button class="btn btn-ghost btn-sm" onclick="copyContent()">📋 Copy</button>
+            <button class="btn btn-ghost btn-sm" onclick="saveToPlanner()">📅 บันทึกลง Planner</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="row-between mb-12">
+            <span style="font-size:13px; font-weight:600;">🎬 Video Prompt (Google Flow)</span>
+            <span class="badge badge-amber" id="credit-badge">— Credits</span>
+          </div>
+          <div id="video-prompt-output" class="prompt-box">
+            <div class="prompt-box-label">Video Prompt</div>
+            <p style="color:var(--text3)">จะสร้างหลัง Generate Content...</p>
+          </div>
+          <div class="warn-row mt-12">
+            <span>⚡</span>
+            <div>Copy prompt → เปิด <a href="https://flow.google.com" target="_blank" style="color:var(--accent)">flow.google.com</a> → วาง → Generate (~150 credits/คลิป)</div>
+          </div>
+          <div class="row mt-12" style="justify-content:flex-end; gap:8px;">
+            <button class="btn btn-ghost btn-sm" onclick="copyVideoPrompt()">📋 Copy Prompt</button>
+            <button class="btn btn-primary btn-sm" onclick="window.open('https://flow.google.com','_blank')">🎬 เปิด Flow</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="row-between mb-12">
+            <span style="font-size:13px; font-weight:600;">🖼️ Slideshow Video (ฟรี)</span>
+            <span class="badge badge-green">ไม่เสีย Credit</span>
+          </div>
+          <div class="info-row mb-12"><span>ℹ️</span><span>สร้าง Slideshow จากรูปสินค้า + Caption — เหมาะ Facebook / Reels</span></div>
+          <button class="btn btn-green full-width" onclick="generateSlideshow()">🎞️ สร้าง Slideshow Video</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ MODULE 3: POST PLANNER ═══ -->
+  <div class="page" id="page-m3">
+    <div class="page-header">
+      <div class="page-title">📅 Post Planner</div>
+      <div class="page-desc">วางแผนการโพสต์รายสัปดาห์ · ซิงค์กับ Google Sheets อัตโนมัติ</div>
+    </div>
+
+    <div class="card card-sm">
+      <div class="row-between">
+        <div class="row gap-8">
+          <button class="btn btn-ghost btn-sm" onclick="changeWeek(-1)">← ก่อนหน้า</button>
+          <span id="week-label" style="font-size:13px; font-weight:600;"></span>
+          <button class="btn btn-ghost btn-sm" onclick="changeWeek(1)">หน้า →</button>
+        </div>
+        <div class="row gap-8">
+          <button class="btn btn-ghost btn-sm" onclick="showPage('m4')">📊 ดู Performance</button>
+          <button class="btn btn-primary btn-sm" onclick="openAddPlanModal()">+ เพิ่มแผน</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="calendar-week" id="calendar-week"></div>
+
+    <div class="card">
+      <div class="row-between mb-12">
+        <span style="font-size:13px; font-weight:600;">รายการทั้งหมด</span>
+        <span id="plans-count" class="badge badge-blue">0 รายการ</span>
+      </div>
+      <div id="planner-list"></div>
+    </div>
+  </div>
+
+  <!-- ═══ MODULE 4: PERFORMANCE TRACKER ═══ -->
+  <div class="page" id="page-m4">
+    <div class="page-header">
+      <div class="row-between">
+        <div>
+          <div class="page-title">📊 Performance Tracker</div>
+          <div class="page-desc">ดึงข้อมูล Order จาก Shopee Affiliate API โดยตรง</div>
+        </div>
+        <div class="row gap-8">
+          <button class="btn btn-ghost btn-sm" onclick="syncShopeePerformance()">
+            📊 เปิด Affiliate Dashboard
+          </button>
+          <button class="btn btn-primary btn-sm" onclick="openTrackModal()">
+            + บันทึกผล
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div id="perf-api-banner" style="display:none;"></div>
+
+    <div class="stat-cards">
+      <div class="stat-card"><div class="stat-label">Commission รวม (Shopee)</div><div class="stat-value green" id="stat-commission">฿0</div><div class="stat-sub" id="stat-commission-sub">ยังไม่ได้ดึงข้อมูล</div></div>
+      <div class="stat-card"><div class="stat-label">Orders ทั้งหมด</div><div class="stat-value amber" id="stat-clicks">0</div><div class="stat-sub">จาก Shopee API</div></div>
+      <div class="stat-card"><div class="stat-label">Manual Clicks</div><div class="stat-value blue" id="stat-orders">0</div><div class="stat-sub">กรอกเอง</div></div>
+      <div class="stat-card"><div class="stat-label">Conversion Rate</div><div class="stat-value" id="stat-cvr">0%</div><div class="stat-sub">Click → Order</div></div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <div class="row-between mb-12"><span style="font-size:13px; font-weight:600;">Commission 7 วัน</span></div>
+        <div class="chart-wrap" id="commission-chart"><div class="empty-state" style="padding:20px; width:100%;"><p>ยังไม่มีข้อมูล</p></div></div>
+      </div>
+      <div class="card">
+        <div style="font-size:13px; font-weight:600; margin-bottom:14px;">แยกตาม Platform</div>
+        <div id="platform-breakdown"><div class="empty-state" style="padding:20px;"><p>ยังไม่มีข้อมูล</p></div></div>
+      </div>
+    </div>
+
+    <!-- Shopee API Orders -->
+    <div class="card">
+      <div class="row-between mb-12">
+        <div>
+          <span style="font-size:13px;font-weight:600;">Orders จาก Shopee API</span>
+          <span id="orders-last-sync" style="font-size:11px;color:var(--text3);margin-left:8px;"></span>
+        </div>
+        <span id="orders-count-badge" class="badge badge-blue" style="display:none;"></span>
+      </div>
+      <div id="shopee-orders-wrap">
+        <div class="info-row">
+          <span>ℹ️</span>
+          <span>กด "ดึงข้อมูลจาก Shopee" ด้านบนเพื่อโหลด Orders และ Commission จาก Shopee Affiliate API</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Manual Tracker -->
+    <div class="card">
+      <div class="row-between mb-12">
+        <div>
+          <span style="font-size:13px;font-weight:600;">บันทึก Clicks ด้วยตัวเอง</span>
+          <span style="font-size:11px;color:var(--text3);margin-left:8px;">(Shopee API ไม่มี click data — กรอกเองจาก platform)</span>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="openTrackModal()">+ เพิ่ม</button>
+      </div>
+      <div id="tracker-table-wrap">
+        <div class="empty-state" style="padding:24px;"><p>ยังไม่มีข้อมูล Click</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ SETTINGS ═══ -->
+  <div class="page" id="page-settings">
+    <div class="page-header">
+      <div class="page-title">⚙️ Settings</div>
+      <div class="page-desc">ตั้งค่า API Keys และ Google Sheets Sync</div>
+    </div>
+
+    <!-- Google Sheets Setup -->
+    <div class="settings-panel">
+      <h3>📊 Google Sheets Sync</h3>
+      <div id="sheets-status-banner" class="info-row mb-12">
+        <span>ℹ️</span>
+        <span>ยังไม่ได้เชื่อมต่อ Google Sheets — ดู <strong>วิธีตั้งค่า</strong> ด้านล่าง</span>
+      </div>
+      <div>
+        <label>Apps Script Web App URL</label>
+        <div class="row mt-4">
+          <input type="text" id="cfg-sheets-url" placeholder="https://script.google.com/macros/s/xxx/exec" style="flex:1;" />
+          <button class="btn btn-ghost btn-sm" onclick="testSheetsConnection()" id="test-btn">🔗 ทดสอบ</button>
+        </div>
+      </div>
+      <div class="mt-12">
+        <details>
+          <summary style="cursor:pointer; font-size:12px; color:var(--accent); font-weight:600; padding: 4px 0;">📖 วิธีตั้งค่า Google Sheets (คลิกเพื่อขยาย)</summary>
+          <div style="margin-top:12px; display:flex; flex-direction:column; gap:8px; font-size:12px; color:var(--text2); line-height:1.6;">
+            <div class="success-row"><span>1️⃣</span><span>สร้าง Google Sheets ใหม่ → Extensions → Apps Script</span></div>
+            <div class="success-row"><span>2️⃣</span><span>วางโค้ดจากไฟล์ <strong>Code.gs</strong> ที่แนบมา → Save</span></div>
+            <div class="success-row"><span>3️⃣</span><span>Deploy → New Deployment → Web App → Execute as: <strong>Me</strong> → Access: <strong>Anyone</strong></span></div>
+            <div class="success-row"><span>4️⃣</span><span>Copy URL ที่ได้มาวางในช่องด้านบน → กด "ทดสอบ"</span></div>
+            <div class="warn-row"><span>⚠️</span><span>ครั้งแรกจะมีขอ Permission — กด Allow เพื่ออนุญาต</span></div>
+            <div style="margin-top:12px;font-weight:600;font-size:12px;color:var(--accent);">🔑 ตั้งค่า Shopee API Keys ใน Script Properties (ปลอดภัย)</div>
+            <div class="success-row"><span>5️⃣</span><span>ใน Apps Script → Project Settings → Script Properties → เพิ่ม:<br>
+              <code style="background:var(--bg);padding:4px 8px;border-radius:4px;display:inline-block;margin-top:4px;font-size:11px;color:var(--accent);">
+                SHOPEE_APP_ID = your_app_id<br>
+                SHOPEE_SECRET = your_secret_key
+              </code>
+            </span></div>
+            <div class="warn-row"><span>💡</span><span>Secret Key จะอยู่ใน Script Properties เท่านั้น — ไม่หลุดมาที่ Browser เด็ดขาด</span></div>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <!-- API Keys -->
+    <div class="settings-panel">
+      <h3>🔑 API Keys (เก็บเฉพาะในเครื่อง — ไม่ Sync ขึ้น Sheets)</h3>
+      <div class="settings-grid">
+        <div>
+          <label>Gemini API Key</label>
+          <div class="row mt-4" style="gap:8px;">
+            <input type="password" id="cfg-gemini" placeholder="AIza••••••••••••••" style="flex:1;" />
+            <button class="btn btn-ghost btn-sm" onclick="testGeminiKey()" id="gemini-test-btn" style="white-space:nowrap;">🔗 ทดสอบ</button>
+          </div>
+          <div id="gemini-status" style="margin-top:8px;display:none;"></div>
+        </div>
+        <div style="display:flex;flex-direction:column;justify-content:flex-end;gap:8px;padding-bottom:2px;">
+          <div style="font-size:12px;color:var(--text2);">ยังไม่มี Key?</div>
+          <a href="https://aistudio.google.com/apikey" target="_blank" class="btn btn-ghost btn-sm" style="justify-content:center;">🔑 สร้าง Key ฟรีที่ AI Studio →</a>
+        </div>
+      </div>
+      <div class="info-row mt-12">
+        <span>💡</span>
+        <span>สร้าง Key จาก <strong>aistudio.google.com/apikey</strong> → เลือก "Create new project" (ไม่ใช่ Project ที่มี Billing) → ฟรี 1,500 requests/วัน</span>
+      </div>
+    </div>
+
+    <!-- Credits & Profile -->
+    <div class="settings-panel">
+      <h3>⚡ Google Flow Credits & โปรไฟล์</h3>
+      <div class="settings-grid">
+        <div><label>Credit รายเดือน</label><input type="number" id="cfg-credit-total" value="1000" /></div>
+        <div><label>Credit ที่ใช้ไปแล้ว</label><input type="number" id="cfg-credit-used" value="0" /></div>
+        <div><label>ชื่อ Channel / Page</label><input type="text" id="cfg-channel" placeholder="เช่น BenGen Reviews" /></div>
+        <div><label>Niche</label><input type="text" id="cfg-niche" placeholder="เช่น Beauty, Electronics" /></div>
+      </div>
+    </div>
+
+    <div class="row" style="justify-content:flex-end; gap:10px;">
+      <button class="btn btn-red" onclick="clearAllData()">🗑️ ล้างข้อมูลทั้งหมด</button>
+      <button class="btn btn-ghost" onclick="exportBackup()">💾 Export Backup</button>
+      <button class="btn btn-primary" onclick="saveSettings()">✅ บันทึก Settings</button>
+    </div>
+  </div>
+
+</main>
+
+<!-- MODALS -->
+<div class="modal-overlay" id="modal-plan">
+  <div class="modal">
+    <div class="modal-title">📅 เพิ่มแผนการโพสต์</div>
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <div><label>ชื่อสินค้า</label><input type="text" id="plan-product" placeholder="ชื่อสินค้า" /></div>
+      <div class="two-col">
+        <div><label>Platform</label>
+          <select id="plan-platform">
+            <option value="reels">🎬 Reels / Shopee Video</option>
+            <option value="facebook">📘 Facebook Page</option>
+            <option value="both">✨ ทั้งคู่</option>
+          </select>
+        </div>
+        <div><label>วันที่โพสต์</label><input type="date" id="plan-date" /></div>
+      </div>
+      <div><label>Affiliate Link</label><input type="text" id="plan-link" placeholder="https://s.shopee.co.th/..." /></div>
+      <div><label>หมายเหตุ / Content Idea</label><textarea id="plan-note" style="min-height:60px;" placeholder="จดไอเดีย..."></textarea></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-plan')">ยกเลิก</button>
+      <button class="btn btn-primary" onclick="savePlan()">💾 บันทึก</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-track">
+  <div class="modal">
+    <div class="modal-title">📊 บันทึกผลโพสต์</div>
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <div><label>ชื่อสินค้า / โพสต์</label><input type="text" id="track-product" placeholder="ชื่อสินค้า" /></div>
+      <div class="two-col">
+        <div><label>Platform</label>
+          <select id="track-platform">
+            <option value="reels">🎬 Reels / Shopee Video</option>
+            <option value="facebook">📘 Facebook Page</option>
+          </select>
+        </div>
+        <div><label>วันที่โพสต์</label><input type="date" id="track-date" /></div>
+      </div>
+      <div class="three-col">
+        <div><label>คลิก</label><input type="number" id="track-clicks" placeholder="0" /></div>
+        <div><label>Orders</label><input type="number" id="track-orders" placeholder="0" /></div>
+        <div><label>Commission (฿)</label><input type="number" id="track-commission" placeholder="0.00" step="0.01" /></div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-track')">ยกเลิก</button>
+      <button class="btn btn-primary" onclick="saveTrack()">💾 บันทึก</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════
+const APP_KEY = 'affiliateHQ_v2';
+
+function loadState() {
+  try { return JSON.parse(localStorage.getItem(APP_KEY)) || {}; } catch { return {}; }
+}
+function saveState(s) { localStorage.setItem(APP_KEY, JSON.stringify(s)); }
+
+let state = loadState();
+if (!state.plans)        state.plans        = [];
+if (!state.tracks)       state.tracks       = [];
+if (!state.config)       state.config       = {};
+if (!state.syncedAt)     state.syncedAt     = null;
+if (!state.shopeeOrders) state.shopeeOrders = [];
+if (!state.shopeeSummary)state.shopeeSummary= {};
+
+let currentWeekOffset = 0;
+let selectedPlatform = 'reels';
+let selectedTone = 'review';
+let lastGeneratedContent = '';
+let lastVideoPrompt = '';
+let isSyncing = false;
+
+// ═══════════════════════════════════════
+// SHEETS API LAYER
+// ═══════════════════════════════════════
+async function sheetsRequest(action, sheetName, data = null, extra = {}) {
+  const url = state.config.sheetsUrl;
+  if (!url) throw new Error('ยังไม่ได้ตั้งค่า Google Sheets URL');
+
+  const payload = { action, sheet: sheetName, ...extra };
+  if (data) payload.data = data;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify(payload)
+  });
+
+  const result = await res.json();
+  if (result.error) throw new Error(result.error);
+  return result;
+}
+
+async function sheetsRead(sheet) {
+  const r = await sheetsRequest('read', sheet);
+  return r.rows || [];
+}
+
+async function sheetsWrite(sheet, data) {
+  return sheetsRequest('write', sheet, data);
+}
+
+async function sheetsUpdate(sheet, data) {
+  return sheetsRequest('update', sheet, data);
+}
+
+async function sheetsDelete(sheet, id) {
+  return sheetsRequest('delete', sheet, null, { id });
+}
+
+async function sheetsBulkWrite(sheet, rows) {
+  return sheetsRequest('bulkWrite', sheet, null, { rows });
+}
+
+// ═══════════════════════════════════════
+// SYNC ENGINE
+// ═══════════════════════════════════════
+function setSyncStatus(status) {
+  const dot = document.getElementById('sync-dot');
+  const label = document.getElementById('sync-label');
+  dot.className = 'sync-dot';
+  if (status === 'synced') {
+    dot.classList.add('synced');
+    const t = state.syncedAt ? new Date(state.syncedAt).toLocaleTimeString('th-TH', {hour:'2-digit',minute:'2-digit'}) : '';
+    label.textContent = `Synced ${t}`;
+  } else if (status === 'syncing') {
+    dot.classList.add('syncing');
+    label.textContent = 'กำลัง Sync...';
+  } else if (status === 'error') {
+    dot.classList.add('error');
+    label.textContent = 'Sync ล้มเหลว';
+  } else {
+    label.textContent = 'ไม่ได้เชื่อมต่อ Sheets';
+  }
+}
+
+async function syncFromSheets() {
+  if (!state.config.sheetsUrl || isSyncing) return;
+  isSyncing = true;
+  setSyncStatus('syncing');
+  try {
+    const [plans, tracks] = await Promise.all([
+      sheetsRead('Plans'),
+      sheetsRead('Tracker')
+    ]);
+
+    // Merge: Sheets wins for items that exist there
+    const sheetsIds = new Set([...plans.map(p => p.id), ...tracks.map(t => t.id)]);
+
+    // Keep local-only items + all sheets items
+    const mergedPlans = [
+      ...plans,
+      ...state.plans.filter(p => !sheetsIds.has(p.id))
+    ];
+    const mergedTracks = [
+      ...tracks,
+      ...state.tracks.filter(t => !sheetsIds.has(t.id))
+    ];
+
+    state.plans = mergedPlans;
+    state.tracks = mergedTracks;
+    state.syncedAt = new Date().toISOString();
+    saveState(state);
+    setSyncStatus('synced');
+    return true;
+  } catch (err) {
+    setSyncStatus('error');
+    console.error('Sync error:', err);
+    return false;
+  } finally {
+    isSyncing = false;
+  }
+}
+
+async function pushToSheets(sheet, data) {
+  if (!state.config.sheetsUrl) return;
+  try {
+    await sheetsWrite(sheet, data);
+    state.syncedAt = new Date().toISOString();
+    saveState(state);
+    setSyncStatus('synced');
+  } catch (err) {
+    setSyncStatus('error');
+    toast('⚠️ บันทึกลง Sheets ไม่สำเร็จ — ข้อมูลเก็บใน Local แล้ว');
+  }
+}
+
+async function deleteFromSheets(sheet, id) {
+  if (!state.config.sheetsUrl) return;
+  try { await sheetsDelete(sheet, id); } catch {}
+}
+
+async function manualSync() {
+  if (!state.config.sheetsUrl) {
+    toast('⚠️ ตั้งค่า Sheets URL ใน Settings ก่อน');
+    showPage('settings');
+    return;
+  }
+  const ok = await syncFromSheets();
+  if (ok) {
+    toast('✅ Sync สำเร็จ');
+    if (document.getElementById('page-m3').classList.contains('active')) renderCalendar();
+    if (document.getElementById('page-m4').classList.contains('active')) renderTracker();
+  } else {
+    toast('❌ Sync ล้มเหลว — ตรวจสอบ Sheets URL');
+  }
+}
+
+async function testSheetsConnection() {
+  const url = document.getElementById('cfg-sheets-url').value.trim();
+  if (!url) { toast('⚠️ กรอก URL ก่อน'); return; }
+
+  const btn = document.getElementById('test-btn');
+  btn.innerHTML = '<span class="loading"></span>';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch(url + '?action=ping', { method: 'GET' });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      document.getElementById('sheets-status-banner').className = 'success-row mb-12';
+      document.getElementById('sheets-status-banner').innerHTML = '<span>✅</span><span>เชื่อมต่อ Google Sheets สำเร็จ! เวลา Server: ' + data.time + '</span>';
+      toast('✅ เชื่อมต่อสำเร็จ — กด "บันทึก Settings" เพื่อบันทึก URL');
+    } else {
+      throw new Error('Response ไม่ถูกต้อง');
+    }
+  } catch (err) {
+    document.getElementById('sheets-status-banner').className = 'error-row mb-12';
+    document.getElementById('sheets-status-banner').innerHTML = '<span>❌</span><span>เชื่อมต่อไม่สำเร็จ: ' + err.message + ' — ตรวจสอบ URL และ Deploy settings</span>';
+    toast('❌ เชื่อมต่อไม่สำเร็จ');
+  }
+
+  btn.textContent = '🔗 ทดสอบ';
+  btn.disabled = false;
+}
+
+// ═══════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════
+function showPage(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => {
+    if (n.getAttribute('onclick') === `showPage('${page}')`) n.classList.add('active');
+  });
+  if (page === 'm3') renderCalendar();
+  if (page === 'm4') renderTracker();
+  if (page === 'settings') loadSettings();
+}
+
+// ═══════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════
+function loadSettings() {
+  const c = state.config;
+  document.getElementById('cfg-sheets-url').value = c.sheetsUrl || '';
+  document.getElementById('cfg-gemini').value = c.gemini || '';
+  document.getElementById('cfg-credit-total').value = c.creditTotal || 1000;
+  document.getElementById('cfg-credit-used').value = c.creditUsed || 0;
+  document.getElementById('cfg-channel').value = c.channel || '';
+  document.getElementById('cfg-niche').value = c.niche || '';
+
+  if (c.sheetsUrl) {
+    document.getElementById('sheets-status-banner').className = 'success-row mb-12';
+    document.getElementById('sheets-status-banner').innerHTML = '<span>✅</span><span>Google Sheets เชื่อมต่อแล้ว — กด "Sync ตอนนี้" เพื่ออัปเดตข้อมูล</span>';
+  }
+}
+
+async function testGeminiKey() {
+  const key = document.getElementById('cfg-gemini').value.trim();
+  if (!key) { toast('⚠️ กรอก Gemini API Key ก่อนครับ'); return; }
+
+  const btn    = document.getElementById('gemini-test-btn');
+  const status = document.getElementById('gemini-status');
+
+  btn.innerHTML = '<span class="loading"></span>';
+  btn.disabled  = true;
+  status.style.display = 'block';
+  status.className = 'info-row';
+  status.innerHTML = '<span class="loading" style="width:12px;height:12px;"></span><span>กำลังทดสอบ...</span>';
+
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: 'ตอบว่า "OK" เท่านั้น' }] }],
+          generationConfig: { maxOutputTokens: 5 }
+        })
+      }
+    );
+
+    const data = await res.json();
+
+    if (res.ok && data.candidates?.[0]?.content?.parts?.[0]?.text) {
+      // เช็ค billing tier จาก response header (ถ้ามี)
+      const isPaid = res.headers.get('x-goog-billing-project') || false;
+      status.className = 'success-row';
+      status.innerHTML = `
+        <span>✅</span>
+        <div>
+          <strong>เชื่อมต่อสำเร็จ!</strong> — Gemini 2.5 Flash-Lite พร้อมใช้งาน
+          <div style="font-size:11px;margin-top:3px;color:var(--text2);">Model ตอบกลับ: "${data.candidates[0].content.parts[0].text.trim()}"</div>
+        </div>`;
+      toast('✅ Gemini API ใช้งานได้แล้วครับ');
+
+    } else if (data.error) {
+      const code = data.error.code;
+      const msg  = data.error.message || '';
+
+      let advice = '';
+      if (code === 400) advice = 'API Key ไม่ถูกต้อง — ตรวจสอบว่า Copy ครบไหม';
+      else if (code === 403) advice = 'ไม่มีสิทธิ์ใช้งาน — ลองสร้าง Key ใหม่จาก aistudio.google.com/apikey';
+      else if (code === 429) advice = 'เกิน Rate Limit — รอสักครู่แล้วลองใหม่ หรือใช้ Key อื่น';
+      else if (msg.includes('billing') || msg.includes('quota')) advice = '⚠️ Key นี้ผูกกับ Project ที่มี Billing — ลองสร้าง Key ใหม่ใน Project ที่ไม่มี Billing';
+      else advice = msg.substring(0, 120);
+
+      status.className = 'error-row';
+      status.innerHTML = `<span>❌</span><div><strong>Error ${code}</strong><div style="font-size:11px;margin-top:3px;">${advice}</div></div>`;
+      toast('❌ Gemini API Error ' + code);
+    }
+
+  } catch (err) {
+    status.className = 'error-row';
+    status.innerHTML = `<span>❌</span><span>เชื่อมต่อไม่ได้: ${err.message}</span>`;
+    toast('❌ ' + err.message);
+  }
+
+  btn.textContent = '🔗 ทดสอบ';
+  btn.disabled    = false;
+}
+
+async function saveSettings() {
+  state.config = {
+    ...state.config,
+    sheetsUrl: document.getElementById('cfg-sheets-url').value.trim(),
+    gemini: document.getElementById('cfg-gemini').value.trim(),
+    creditTotal: parseInt(document.getElementById('cfg-credit-total').value) || 1000,
+    creditUsed: parseInt(document.getElementById('cfg-credit-used').value) || 0,
+    channel: document.getElementById('cfg-channel').value.trim(),
+    niche: document.getElementById('cfg-niche').value.trim(),
+  };
+  saveState(state);
+  updateCreditDisplay();
+  setSyncStatus(state.config.sheetsUrl ? 'synced' : 'disconnected');
+  toast('✅ บันทึก Settings แล้ว');
+
+  // Push non-sensitive config to Sheets
+  if (state.config.sheetsUrl) {
+    try {
+      await sheetsRequest('setConfig', null, null, {
+        configs: {
+          creditTotal: state.config.creditTotal,
+          channel: state.config.channel,
+          niche: state.config.niche
+        }
+      });
+    } catch {}
+  }
+}
+
+function updateCreditDisplay() {
+  const total = state.config.creditTotal || 1000;
+  const used = state.config.creditUsed || 0;
+  const remaining = Math.max(0, total - used);
+  const pct = Math.min(100, (used / total) * 100);
+  document.getElementById('credit-display').textContent = `${remaining} / ${total}`;
+  document.getElementById('credit-fill').style.width = pct + '%';
+  document.getElementById('credit-badge').textContent = `${remaining} Credits`;
+}
+
+function clearAllData() {
+  if (!confirm('ยืนยันการล้างข้อมูลทั้งหมด?\n(ข้อมูลใน Google Sheets จะยังอยู่)')) return;
+  const cfg = state.config;
+  state = { plans: [], tracks: [], config: cfg, syncedAt: null };
+  saveState(state);
+  toast('🗑️ ล้างข้อมูล Local แล้ว');
+}
+
+function exportBackup() {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `affiliate-hq-backup-${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+  toast('💾 Export Backup แล้ว');
+}
+
+// ═══════════════════════════════════════
+// MODULE 1: PRODUCT INPUT
+// ═══════════════════════════════════════
+
+let currentProduct = null;
+
+async function fetchProductInfo() {
+  const url = document.getElementById('shopee-url-input').value.trim();
+  if (!url) { toast('⚠️ วาง Shopee URL ก่อนครับ'); return; }
+  if (!url.includes('shopee')) { toast('⚠️ URL ต้องเป็นของ Shopee ครับ'); return; }
+
+  const btn = document.getElementById('fetch-btn-text');
+  btn.innerHTML = '<span class="loading"></span> กำลังดึง...';
+  document.getElementById('product-preview').style.display = 'none';
+  showFetchStatus('loading', 'กำลังแกะ itemId/shopId จาก URL...');
+
+  try {
+    // ── Step 1: แกะ itemId + shopId จาก URL ──
+    const ids = extractShopeeIds(url);
+    if (!ids) throw new Error('ไม่พบ itemId/shopId — ลองใช้ลิงก์เต็มจากหน้าสินค้าครับ เช่น shopee.co.th/product/438368998/21088669800');
+
+    const { shopId, itemId } = ids;
+    showFetchStatus('loading', `พบ shopId=${shopId}, itemId=${itemId} — กำลังดึงข้อมูล...`);
+
+    // ── Step 2: เรียก Shopee API จาก Browser โดยตรง (ไม่ผ่าน Server) ──
+    const apiUrl = `https://shopee.co.th/api/v4/item/get?itemid=${itemId}&shopid=${shopId}`;
+    const res = await fetch(apiUrl, {
+      method: 'GET',
+      credentials: 'include',      // ส่ง Cookie ของ Shopee ไปด้วย
+      headers: {
+        'Accept': 'application/json',
+        'x-api-source': 'pc',
+        'x-shopee-language': 'th',
+        'Referer': 'https://shopee.co.th/',
+      }
+    });
+
+    if (!res.ok) throw new Error(`Shopee API ตอบ HTTP ${res.status} — ลอง Copy URL ใหม่จากหน้าสินค้าครับ`);
+
+    const json = await res.json();
+    const item = json.data || json.item;
+    if (!item) throw new Error('ไม่พบข้อมูลสินค้า — ลอง Refresh Shopee แล้วลองใหม่');
+
+    // ── Step 3: Normalize ──
+    const toPrice = v => v ? v / 100000 : 0;
+    const imgBase = 'https://down-th.img.susercontent.com/file/';
+    const sale    = toPrice(item.price_min || item.price);
+    const orig    = toPrice(item.price_before_discount || item.price_max || item.price);
+    const disc    = orig > sale && sale > 0 ? Math.round((1 - sale/orig)*100) : 0;
+
+    currentProduct = {
+      itemId, shopId,
+      name:        item.name || '',
+      description: (item.description || '').substring(0, 500),
+      price:       orig || sale,
+      sale:        sale,
+      discount:    disc,
+      shop:        item.shop_name || '',
+      shopType:    item.shop_type === 1 ? 'mall' : item.shop_type === 2 ? 'preferred' : 'normal',
+      imageUrl:    item.image    ? imgBase + item.image    : '',
+      extraImages: (item.images  || []).slice(0,6).map(i => imgBase + i),
+      rating:      item.item_rating?.rating_star ? +item.item_rating.rating_star.toFixed(1) : 0,
+      ratingCount: item.item_rating?.rating_count?.[0] || 0,
+      sales:       item.historical_sold || item.sold || 0,
+      stock:       item.stock || 0,
+      liked:       item.liked_count || 0,
+      affiliateUrl: url,
+    };
+
+    renderProductPreview(currentProduct);
+    showFetchStatus('success', `✅ ดึงข้อมูลสำเร็จ — ${currentProduct.name.substring(0,45)}...`);
+    toast('✅ ดึงข้อมูลสินค้าสำเร็จ!');
+
+    if (state.config.gemini) {
+      await autoGenerateScript(currentProduct);
+    } else {
+      showScriptStatus('warn', '💡 ตั้งค่า Gemini API Key ใน Settings เพื่อสร้างบทพากย์อัตโนมัติ');
+    }
+
+  } catch (err) {
+    showFetchStatus('error', '❌ ' + err.message);
+    toast('⚠️ ' + err.message);
+    // เปิด Product preview ให้กรอกเองได้
+    currentProduct = { name:'', price:0, sale:0, shop:'', imageUrl:'', affiliateUrl: url };
+    renderProductPreview(currentProduct);
+  }
+
+  btn.textContent = '🔍 ดึงข้อมูล';
+}
+
+function extractShopeeIds(url) {
+  // Pattern 1: /product/shopId/itemId หรือ /shop/shopId/itemId
+  let m = url.match(/shopee\.co\.th\/(?:product|shop)\/(\d+)\/(\d+)/);
+  if (m) return { shopId: m[1], itemId: m[2] };
+
+  // Pattern 2: /anything/shopId/itemId (ลิงก์เต็มทั่วไป)
+  m = url.match(/shopee\.co\.th\/[^/?#]+\/(\d{6,})\/(\d{8,})/);
+  if (m) return { shopId: m[1], itemId: m[2] };
+
+  // Pattern 3: product-name-i.shopId.itemId
+  m = url.match(/-i\.(\d+)\.(\d+)/);
+  if (m) return { shopId: m[1], itemId: m[2] };
+
+  // Pattern 4: ?itemid=xxx&shopid=xxx
+  const qi = url.match(/[?&]itemid=(\d+)/i);
+  const qs = url.match(/[?&]shopid=(\d+)/i);
+  if (qi && qs) return { shopId: qs[1], itemId: qi[1] };
+
+  return null;
+}
+
+function showFetchStatus(type, msg) {
+  const el = document.getElementById('fetch-status');
+  if (!el) return;
+  const cls = {loading:'info-row',success:'success-row',error:'error-row',warn:'warn-row'}[type]||'info-row';
+  el.className = cls; el.style.display = 'flex';
+  el.innerHTML = '<span></span><span>' + msg + '</span>';
+}
+
+function showScriptStatus(type, msg) {
+  const el = document.getElementById('script-status');
+  if (!el) return;
+  const cls = {loading:'info-row',success:'success-row',error:'error-row',warn:'warn-row'}[type]||'info-row';
+  el.className = cls + ' mt-8'; el.style.display = 'flex';
+  el.innerHTML = '<span></span><span>' + msg + '</span>';
+}
+
+async function autoGenerateScript(p) {
+  if (!state.config.gemini) return;
+  showScriptStatus('loading', 'Gemini กำลังสร้างบทพากย์...');
+  const discount = p.discount || (p.price > p.sale ? Math.round((1 - p.sale/p.price)*100) : 0);
+  const tone = document.getElementById('p-tone')?.value || 'review';
+  const toneMap = {review:'รีวิวน่าเชื่อถือ', promo:'โปรโมชั่น Urgency', lifestyle:'Lifestyle ธรรมชาติ'};
+  const prompt = `คุณเป็น Content Creator Affiliate มือโปร
+
+สินค้า: ${p.name}
+ราคาปกติ: ฿${p.price?.toLocaleString()||'-'} → ฿${p.sale?.toLocaleString()||'-'} ${discount>0?'(ลด '+discount+'%)':''}
+ร้าน: ${p.shop||'-'} ${p.shopType==='mall'?'(Shopee Mall)':p.shopType==='preferred'?'(Preferred)':''}
+Rating: ${p.rating||'-'} (${(p.ratingCount||0).toLocaleString()} รีวิว) | ขายแล้ว: ${(p.sales||0).toLocaleString()} ชิ้น
+รายละเอียด: ${(p.description||'').substring(0,200)}
+สไตล์: ${toneMap[tone]}
+
+สร้างครบ 4 ส่วนนี้:
+
+🎯 HOOK (1 บรรทัด):
+
+🎬 SCRIPT (25-30 วิ แบ่ง timestamp):
+
+📝 CAPTION (พร้อม Hashtag):
+
+🎤 บทพากย์ (อ่านออกเสียงภาษาไทย):`;
+
+  try {
+    const res = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=' + state.config.gemini,
+      { method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{temperature:0.8,maxOutputTokens:1200} }) }
+    );
+    const data = await res.json();
+    if (!data.candidates?.[0]?.content?.parts?.[0]?.text) throw new Error(data.error?.message||'API Error');
+    const out = data.candidates[0].content.parts[0].text;
+    const hookM    = out.match(/🎯[\s\S]*?HOOK[\s\S]*?\n([\s\S]*?)(?=🎬|$)/i);
+    const scriptM  = out.match(/🎬[\s\S]*?SCRIPT[\s\S]*?\n([\s\S]*?)(?=📝|$)/i);
+    const captionM = out.match(/📝[\s\S]*?CAPTION[\s\S]*?\n([\s\S]*?)(?=🎤|$)/i);
+    const voiceM   = out.match(/🎤[\s\S]*?[\s\S]*?\n([\s\S]*?)$/i);
+    document.getElementById('script-hook').value    = hookM?.[1]?.trim()||'';
+    document.getElementById('script-body').value    = scriptM?.[1]?.trim()||'';
+    document.getElementById('script-caption').value = captionM?.[1]?.trim()||'';
+    document.getElementById('script-voice').value   = voiceM?.[1]?.trim()||'';
+    document.getElementById('auto-script-output').style.display = 'block';
+    currentProduct._script = { hook:hookM?.[1]?.trim(), script:scriptM?.[1]?.trim(), caption:captionM?.[1]?.trim(), voice:voiceM?.[1]?.trim() };
+    showScriptStatus('success', '✅ สร้างบทพากย์เสร็จแล้ว — แก้ไขได้ด้านล่าง');
+    toast('✅ Gemini สร้างบทพากย์เสร็จ!');
+  } catch (err) {
+    showScriptStatus('error', '❌ Gemini: ' + err.message);
+  }
+}
+
+function renderProductPreview(p) {
+  document.getElementById('product-preview').style.display = 'block';
+  document.getElementById('recent-products-card').style.display = 'none';
+  const imgWrap = document.getElementById('p-img-wrap');
+  if (p.imageUrl) {
+    const extras = (p.extraImages||[]).slice(0,4).map(u=>`<img src="${u}" style="width:28px;height:28px;object-fit:cover;border-radius:3px;cursor:pointer;border:1px solid var(--border);" onclick="setMainImg('${u}')" onerror="this.style.display='none'">`).join('');
+    imgWrap.innerHTML = `<img id="main-img" src="${p.imageUrl}" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML='🛍️'"><div style="display:flex;gap:3px;position:absolute;bottom:5px;left:5px;flex-wrap:wrap;max-width:90%;">${extras}</div>`;
+    imgWrap.style.position = 'relative';
+  } else { imgWrap.innerHTML = '🛍️'; }
+  document.getElementById('p-name').textContent = p.name || 'ไม่พบชื่อสินค้า';
+  document.getElementById('p-shop').textContent = p.shop ? '🏪 ' + p.shop : '';
+  const badges = [];
+  if (p.shopType==='mall')      badges.push('<span class="badge badge-red">🏬 Shopee Mall</span>');
+  if (p.shopType==='preferred') badges.push('<span class="badge badge-blue">⭐ Preferred</span>');
+  if (p.rating)   badges.push('<span class="badge badge-amber">⭐ '+p.rating+' ('+((p.ratingCount||0).toLocaleString())+')</span>');
+  if (p.sales)    badges.push('<span class="badge badge-green">📦 '+formatSales(p.sales)+' ชิ้น</span>');
+  if (p.discount) badges.push('<span class="badge badge-red">🔥 ลด '+p.discount+'%</span>');
+  if (p.stock)    badges.push('<span class="badge badge-blue">🏷️ เหลือ '+p.stock+' ชิ้น</span>');
+  document.getElementById('p-badges').innerHTML = badges.join('');
+  const sale = p.sale||p.price||0, orig = p.price||0;
+  document.getElementById('p-price-sale').textContent = sale ? '฿'+sale.toLocaleString() : '-';
+  document.getElementById('p-price-orig').textContent = (orig>sale) ? '฿'+orig.toLocaleString() : '';
+  const discEl = document.getElementById('p-discount');
+  if (p.discount>0) { discEl.textContent='-'+p.discount+'%'; discEl.style.display='block'; }
+  else discEl.style.display='none';
+  document.getElementById('p-name-edit').value       = p.name||'';
+  document.getElementById('p-price-edit').value      = orig||'';
+  document.getElementById('p-sale-edit').value       = sale||'';
+  document.getElementById('p-commission-edit').value = p.commission||'';
+  document.getElementById('p-affiliate-link').value  = p.affiliateUrl||p.affiliateLink||'';
+  document.getElementById('p-highlights').value      = (p.description||'').substring(0,200);
+}
+
+function setMainImg(url) {
+  const el = document.getElementById('main-img');
+  if (el) el.src = url;
+  if (currentProduct) currentProduct.imageUrl = url;
+}
+
+function sendToVideoTemplate() {
+  const p = getProductFromForm();
+  if (!p.name) { toast('⚠️ กรุณากรอกชื่อสินค้า'); return; }
+
+  const s = currentProduct?._script || {};
+  const hook    = s.hook    || document.getElementById('script-hook')?.value    || p.name;
+  const voice   = s.voice   || document.getElementById('script-voice')?.value   || '';
+  const caption = s.caption || document.getElementById('script-caption')?.value || '';
+
+  // บันทึกลง localStorage สำหรับ Video Template ดึงไปใช้
+  localStorage.setItem('vg_product', JSON.stringify({
+    name:         p.name,
+    price:        p.price,
+    sale:         p.sale,
+    hook:         hook,
+    link:         p.affiliateLink || p.affiliateUrl || '',
+    imageUrl:     p.imageUrl || '',
+    extraImages:  p.extraImages || [],
+    voice,
+    caption,
+  }));
+
+  // เปิด Video Template ใน Tab ใหม่
+  window.open('bengen-template.html', '_blank');
+  toast('🎬 เปิด Video Template แล้ว — ข้อมูลสินค้าถูกส่งไปแล้วครับ');
+}
+
+function copyVoiceScript() {
+  const text = document.getElementById('script-voice')?.value?.trim();
+  if (!text) { toast('⚠️ ยังไม่มีบทพากย์'); return; }
+  navigator.clipboard.writeText(text);
+  toast('📋 Copy บทพากย์แล้ว → วางใน Google AI Studio TTS ได้เลย');
+}
+
+async function reGenerateScript() {
+  if (!currentProduct) { toast('⚠️ ดึงข้อมูลสินค้าก่อนครับ'); return; }
+  if (!state.config.gemini) { toast('⚠️ ตั้งค่า Gemini API Key ก่อน'); return; }
+  document.getElementById('auto-script-output').style.display = 'none';
+  await autoGenerateScript(currentProduct);
+}
+
+function getProductFromForm() {
+  return {
+    ...currentProduct,
+    name:          document.getElementById('p-name-edit').value.trim(),
+    price:         parseFloat(document.getElementById('p-price-edit').value) || 0,
+    sale:          parseFloat(document.getElementById('p-sale-edit').value) || 0,
+    commission:    parseFloat(document.getElementById('p-commission-edit').value) || 0,
+    affiliateLink: document.getElementById('p-affiliate-link').value.trim(),
+    highlights:    document.getElementById('p-highlights').value.trim(),
+  };
+}
+
+function sendProductToContentStudio() {
+  const p = getProductFromForm();
+  if (!p.name) { toast('⚠️ กรุณากรอกชื่อสินค้า'); return; }
+
+  document.getElementById('m2-product-name').value   = p.name;
+  document.getElementById('m2-price').value          = p.price;
+  document.getElementById('m2-price-sale').value     = p.sale;
+  document.getElementById('m2-commission').value     = p.commission;
+  document.getElementById('m2-affiliate-link').value = p.affiliateLink;
+  document.getElementById('m2-highlights').value     = p.highlights;
+
+  document.getElementById('m2-product-display').innerHTML = `
+    <div style="background:var(--bg3);border-radius:8px;padding:12px;display:flex;gap:10px;align-items:center;">
+      ${p.imageUrl
+        ? `<img src="${p.imageUrl}" style="width:48px;height:48px;object-fit:cover;border-radius:6px;" onerror="this.style.display='none'">`
+        : `<div style="width:48px;height:48px;background:var(--bg2);border-radius:6px;display:flex;align-items:center;justify-content:center;">🛍️</div>`}
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px;">${p.name}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${p.commission ? `<span class="badge badge-green">${p.commission}% Commission</span>` : ''}
+          ${p.sale ? `<span class="badge badge-amber">฿${p.sale.toLocaleString()}</span>` : ''}
+          ${p.shop ? `<span style="font-size:11px;color:var(--text3);">🏪 ${p.shop}</span>` : ''}
+        </div>
+      </div>
+    </div>`;
+
+  showPage('m2');
+  toast('✅ เลือกสินค้าแล้ว → กด Generate ได้เลย');
+}
+
+async function saveProductToSheets() {
+  const p = getProductFromForm();
+  if (!p.name) { toast('⚠️ กรุณากรอกชื่อสินค้า'); return; }
+  const btn = document.getElementById('save-product-btn');
+  btn.innerHTML = '<span class="loading"></span>'; btn.disabled = true;
+  try {
+    await pushToSheets('Products', {
+      id: p.id || Date.now().toString(),
+      name: p.name, price: p.price, priceSale: p.sale,
+      commissionRate: p.commission, affiliateLink: p.affiliateLink,
+      shopName: p.shop||'', rating: p.rating||'', sales: p.sales||'',
+      imageUrl: p.imageUrl||'', savedAt: new Date().toISOString()
+    });
+    btn.innerHTML = '✅ บันทึกแล้ว';
+    toast('🔖 บันทึกสินค้าลง Sheets แล้ว');
+    setTimeout(() => { btn.textContent = '🔖 บันทึกสินค้าลง Sheets'; btn.disabled = false; }, 2000);
+  } catch {
+    btn.textContent = '🔖 บันทึกสินค้าลง Sheets'; btn.disabled = false;
+    toast('❌ บันทึกไม่สำเร็จ');
+  }
+}
+
+function addToPlanner() {
+  const p = getProductFromForm();
+  if (!p.name) { toast('⚠️ กรุณากรอกชื่อสินค้า'); return; }
+  document.getElementById('plan-product').value = p.name;
+  document.getElementById('plan-link').value    = p.affiliateLink;
+  document.getElementById('plan-date').value    = new Date().toISOString().split('T')[0];
+  openAddPlanModal();
+}
+
+async function loadSavedProducts() {
+  if (!state.config.sheetsUrl) { toast('⚠️ ตั้งค่า Sheets URL ก่อน'); return; }
+  const wrap = document.getElementById('recent-products-wrap');
+  const savedWrap = document.getElementById('saved-products-list');
+  const loading = `<div style="text-align:center;padding:16px;"><span class="loading"></span></div>`;
+  if (wrap) wrap.innerHTML = loading;
+  if (savedWrap) savedWrap.innerHTML = loading;
+
+  try {
+    const rows = await sheetsRead('Products');
+    if (!rows.length) {
+      const empty = `<div style="font-size:12px;color:var(--text3);text-align:center;padding:16px;">ยังไม่มีสินค้า</div>`;
+      if (wrap) wrap.innerHTML = empty;
+      if (savedWrap) savedWrap.innerHTML = empty;
+      return;
+    }
+    const sorted = [...rows].sort((a,b) => new Date(b.savedAt||0) - new Date(a.savedAt||0));
+    window._savedProducts = sorted;
+    const html = sorted.map((p,i) => `
+      <div style="display:flex;gap:10px;align-items:center;padding:10px 0;${i>0?'border-top:1px solid var(--border);':''}">
+        ${p.imageUrl
+          ? `<img src="${p.imageUrl}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0;" onerror="this.style.display='none'">`
+          : `<div style="width:40px;height:40px;background:var(--bg3);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">🛍️</div>`}
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.name||'-'}</div>
+          <div style="display:flex;gap:6px;margin-top:3px;flex-wrap:wrap;">
+            ${p.commissionRate?`<span class="badge badge-green" style="font-size:10px;">${p.commissionRate}%</span>`:''}
+            ${p.priceSale?`<span class="badge badge-amber" style="font-size:10px;">฿${parseFloat(p.priceSale).toLocaleString()}</span>`:''}
+          </div>
+        </div>
+        <button class="btn btn-ghost btn-sm" style="font-size:11px;" onclick="loadSavedProduct(${i})">✍️</button>
+      </div>`).join('');
+    if (wrap) wrap.innerHTML = html;
+    if (savedWrap) savedWrap.innerHTML = html;
+  } catch (err) {
+    const errHtml = `<div style="font-size:12px;color:var(--red);padding:16px;">${err.message}</div>`;
+    if (wrap) wrap.innerHTML = errHtml;
+    if (savedWrap) savedWrap.innerHTML = errHtml;
+  }
+}
+
+function loadSavedProduct(i) {
+  const p = window._savedProducts[i];
+  currentProduct = {
+    id: p.id, name: p.name,
+    price: parseFloat(p.price)||0, sale: parseFloat(p.priceSale)||0,
+    commission: parseFloat(p.commissionRate)||0,
+    affiliateLink: p.affiliateLink||'', shop: p.shopName||'',
+    imageUrl: p.imageUrl||'', rating: p.rating||'', sales: p.sales||'',
+  };
+  renderProductPreview(currentProduct);
+  document.getElementById('shopee-url-input').value = '';
+  toast('✅ โหลดสินค้าแล้ว — แก้ไขและส่งไป Content Studio ได้เลย');
+}
+
+function formatSales(n) {
+  if (!n) return '';
+  n = parseInt(n);
+  if (n >= 1000) return (n/1000).toFixed(1) + 'K';
+  return n.toString();
+}
+
+// ═══════════════════════════════════════
+// MODULE 2: CONTENT STUDIO
+// ═══════════════════════════════════════
+function selectPlatform(el) {
+  document.querySelectorAll('[data-platform]').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  selectedPlatform = el.getAttribute('data-platform');
+}
+
+function selectTone(el) {
+  document.querySelectorAll('[data-tone]').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  selectedTone = el.getAttribute('data-tone');
+}
+
+async function generateContent() {
+  const name = document.getElementById('m2-product-name').value.trim();
+  if (!name) { toast('⚠️ กรอกชื่อสินค้าก่อน'); return; }
+  if (!state.config.gemini) { toast('⚠️ ตั้งค่า Gemini API Key ก่อน'); showPage('settings'); return; }
+
+  const price = document.getElementById('m2-price').value;
+  const priceSale = document.getElementById('m2-price-sale').value;
+  const commission = document.getElementById('m2-commission').value;
+  const highlights = document.getElementById('m2-highlights').value;
+  const affiliateLink = document.getElementById('m2-affiliate-link').value || 'https://s.shopee.co.th/xxxxx';
+  const lang = document.getElementById('m2-lang').value;
+  const discount = price && priceSale ? Math.round((1 - priceSale/price)*100) : null;
+
+  document.getElementById('gen-btn-text').innerHTML = '<span class="loading"></span>';
+  document.getElementById('gen-btn').disabled = true;
+  document.getElementById('content-output').innerHTML = '<div class="content-placeholder"><span class="loading"></span><br><br>AI กำลังสร้าง Content...</div>';
+
+  const platformMap = { reels: 'Reels/Shopee Video (วิดีโอสั้น 30-60 วิ)', facebook: 'Facebook Page', both: 'Reels + Facebook' };
+  const toneMap = { review: 'รีวิวสินค้าจริง น่าเชื่อถือ', promo: 'โปรโมชั่น สร้าง Urgency', lifestyle: 'Lifestyle เป็นธรรมชาติ' };
+  const langMap = { th: 'ภาษาไทย', en: 'English', both: 'ไทย + อังกฤษ' };
+
+  const prompt = `คุณเป็น Content Creator Shopee Affiliate มือโปรในไทย
+
+สร้าง Content สำหรับ:
+สินค้า: ${name}
+ราคาปกติ: ฿${price||'N/A'} ${discount?`→ ลด ${discount}%`:''}
+ราคาพิเศษ: ฿${priceSale||'N/A'}
+Commission: ${commission||'N/A'}%
+จุดเด่น: ${highlights||'ไม่ระบุ'}
+Affiliate Link: ${affiliateLink}
+Platform: ${platformMap[selectedPlatform]}
+สไตล์: ${toneMap[selectedTone]}
+ภาษา: ${langMap[lang]}
+
+${selectedPlatform !== 'facebook' ? `🎬 SCRIPT VIDEO:\n[0-3วิ] Hook\n[3-15วิ] แนะนำสินค้า\n[15-25วิ] จุดเด่น\n[25-30วิ] CTA + Link\n\n` : ''}
+📝 CAPTION:
+(ข้อความ + Emoji + Hashtag พร้อมโพสต์)`;
+
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${state.config.gemini}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.8, maxOutputTokens: 1500 } })
+    });
+    const data = await res.json();
+    if (!data.candidates?.[0]?.content?.parts?.[0]?.text) throw new Error(data.error?.message || 'API Error');
+
+    lastGeneratedContent = data.candidates[0].content.parts[0].text;
+    document.getElementById('content-output').innerHTML = `<div style="white-space:pre-wrap;font-size:13px;line-height:1.7;">${lastGeneratedContent}</div>`;
+
+    await generateVideoPrompt(name, highlights, priceSale || price);
+
+    // Auto-save to Sheets ContentLog
+    const logData = {
+      id: Date.now().toString(),
+      product: name,
+      platform: selectedPlatform,
+      tone: selectedTone,
+      lang,
+      content: lastGeneratedContent,
+      videoPrompt: lastVideoPrompt,
+      createdAt: new Date().toISOString()
+    };
+    if (state.config.sheetsUrl) {
+      pushToSheets('ContentLog', logData).catch(() => {});
+    }
+
+  } catch (err) {
+    document.getElementById('content-output').innerHTML = `<div style="color:var(--red);font-size:13px;">❌ Error: ${err.message}</div>`;
+    toast('❌ ' + err.message);
+  }
+
+  document.getElementById('gen-btn-text').textContent = '⚡ Generate';
+  document.getElementById('gen-btn').disabled = false;
+}
+
+async function generateVideoPrompt(name, highlights, price) {
+  const p = `สร้าง Video Prompt สำหรับ Google Flow (Veo AI) โฆษณา: ${name} ราคา ฿${price} ${highlights||''}
+English, 2-3 ประโยค, 5-8 วินาที, Commercial product, clean background, cinematic, vertical 9:16, no text/logo`;
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${state.config.gemini}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: p }] }], generationConfig: { temperature: 0.7, maxOutputTokens: 200 } })
+    });
+    const data = await res.json();
+    if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
+      lastVideoPrompt = data.candidates[0].content.parts[0].text.trim();
+      document.getElementById('video-prompt-output').innerHTML = `
+        <div class="prompt-box-label">Video Prompt</div>
+        <p>${lastVideoPrompt}</p>
+        <button class="btn btn-ghost btn-sm copy-btn-abs" onclick="copyVideoPrompt()">📋</button>
+      `;
+    }
+  } catch {}
+}
+
+function copyContent() {
+  if (!lastGeneratedContent) { toast('⚠️ ยังไม่มี Content'); return; }
+  navigator.clipboard.writeText(lastGeneratedContent);
+  toast('📋 Copy Content แล้ว');
+}
+
+function copyVideoPrompt() {
+  if (!lastVideoPrompt) { toast('⚠️ ยังไม่มี Prompt'); return; }
+  navigator.clipboard.writeText(lastVideoPrompt);
+  toast('📋 Copy Prompt แล้ว → วางใน flow.google.com');
+}
+
+function saveToPlanner() {
+  const name = document.getElementById('m2-product-name').value.trim();
+  if (!name) { toast('⚠️ ไม่มีชื่อสินค้า'); return; }
+  document.getElementById('plan-product').value = name;
+  document.getElementById('plan-platform').value = selectedPlatform;
+  document.getElementById('plan-link').value = document.getElementById('m2-affiliate-link').value;
+  document.getElementById('plan-note').value = lastGeneratedContent.substring(0, 300);
+  openAddPlanModal();
+}
+
+function generateSlideshow() {
+  const name = document.getElementById('m2-product-name').value.trim();
+  if (!name) { toast('⚠️ กรอกชื่อสินค้าก่อน'); return; }
+  toast('🎞️ Slideshow Generator — coming soon in v3');
+}
+
+// ═══════════════════════════════════════
+// MODULE 3: PLANNER
+// ═══════════════════════════════════════
+function getWeekDates(offset) {
+  const now = new Date();
+  const day = now.getDay();
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1) + offset * 7);
+  return Array.from({ length: 7 }, (_, i) => { const d = new Date(monday); d.setDate(monday.getDate() + i); return d; });
+}
+
+function changeWeek(dir) { currentWeekOffset += dir; renderCalendar(); }
+
+function renderCalendar() {
+  const days = ['จ','อ','พ','พฤ','ศ','ส','อา'];
+  const dates = getWeekDates(currentWeekOffset);
+  const today = new Date().toDateString();
+  const start = dates[0].toLocaleDateString('th-TH', { day:'numeric', month:'short' });
+  const end = dates[6].toLocaleDateString('th-TH', { day:'numeric', month:'short', year:'2-digit' });
+  document.getElementById('week-label').textContent = `${start} — ${end}`;
+
+  document.getElementById('calendar-week').innerHTML = dates.map((d, i) => {
+    const dateStr = d.toISOString().split('T')[0];
+    const isToday = d.toDateString() === today;
+    const dayPlans = state.plans.filter(p => p.date === dateStr);
+    return `
+      <div class="day-col">
+        <div class="day-header ${isToday ? 'today' : ''}">
+          <div class="day-date">${d.getDate()}</div>
+          <div>${days[i]}</div>
+        </div>
+        <div class="day-slots">
+          ${dayPlans.map(p => `
+            <div class="plan-slot ${p.status||'draft'}" onclick="togglePlanStatus('${p.id}')">
+              <div class="plan-slot-title">${p.product}</div>
+              <div class="plan-slot-meta">${platformEmoji(p.platform)} ${p.status==='posted'?'✅':'📝'}</div>
+            </div>
+          `).join('')}
+          <button class="btn btn-ghost btn-sm full-width" style="font-size:10px;padding:3px;" onclick="openAddPlanModalDate('${dateStr}')">+</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  renderPlannerList();
+  document.getElementById('plans-count').textContent = state.plans.length + ' รายการ';
+}
+
+function renderPlannerList() {
+  if (!state.plans.length) {
+    document.getElementById('planner-list').innerHTML = `<div class="empty-state" style="padding:24px 0;"><p>ยังไม่มีแผน</p></div>`;
+    return;
+  }
+  const sorted = [...state.plans].sort((a,b) => new Date(a.date) - new Date(b.date));
+  document.getElementById('planner-list').innerHTML = `
+    <table>
+      <thead><tr><th>สินค้า</th><th>Platform</th><th>วันที่</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        ${sorted.map(p => `
+          <tr>
+            <td style="font-weight:500;">${p.product}</td>
+            <td>${platformEmoji(p.platform)} ${p.platform}</td>
+            <td>${p.date}</td>
+            <td><span class="badge ${p.status==='posted'?'badge-green':'badge-amber'}">${p.status==='posted'?'✅ Posted':'📝 Draft'}</span></td>
+            <td>
+              <div class="row gap-8">
+                <button class="btn btn-ghost btn-sm" onclick="togglePlanStatus('${p.id}')">${p.status==='posted'?'Unpost':'Mark Posted'}</button>
+                <button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deletePlan('${p.id}')">🗑️</button>
+              </div>
+            </td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+function platformEmoji(p) { return {reels:'🎬',facebook:'📘',both:'✨'}[p]||'📱'; }
+
+function openAddPlanModal() {
+  if (!document.getElementById('plan-date').value) document.getElementById('plan-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('modal-plan').classList.add('show');
+}
+
+function openAddPlanModalDate(date) {
+  document.getElementById('plan-date').value = date;
+  document.getElementById('plan-product').value = '';
+  document.getElementById('plan-note').value = '';
+  document.getElementById('modal-plan').classList.add('show');
+}
+
+async function savePlan() {
+  const product = document.getElementById('plan-product').value.trim();
+  const date = document.getElementById('plan-date').value;
+  if (!product || !date) { toast('⚠️ กรอกชื่อสินค้าและวันที่'); return; }
+
+  const plan = {
+    id: Date.now().toString(),
+    product,
+    platform: document.getElementById('plan-platform').value,
+    date,
+    affiliateLink: document.getElementById('plan-link').value,
+    note: document.getElementById('plan-note').value,
+    status: 'draft',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  state.plans.push(plan);
+  saveState(state);
+  closeModal('modal-plan');
+  renderCalendar();
+  toast('✅ บันทึกแผนแล้ว');
+
+  // Push to Sheets
+  await pushToSheets('Plans', plan);
+}
+
+async function togglePlanStatus(id) {
+  const plan = state.plans.find(p => p.id === id);
+  if (!plan) return;
+  plan.status = plan.status === 'posted' ? 'draft' : 'posted';
+  plan.updatedAt = new Date().toISOString();
+  saveState(state);
+  renderCalendar();
+  await pushToSheets('Plans', plan);
+  toast(plan.status === 'posted' ? '✅ Mark Posted' : '📝 Mark Draft');
+}
+
+async function deletePlan(id) {
+  if (!confirm('ลบแผนนี้?')) return;
+  state.plans = state.plans.filter(p => p.id !== id);
+  saveState(state);
+  renderCalendar();
+  await deleteFromSheets('Plans', id);
+  toast('🗑️ ลบแผนแล้ว');
+}
+
+// ═══════════════════════════════════════
+// MODULE 4: TRACKER
+// ═══════════════════════════════════════
+
+function syncShopeePerformance() {
+  // Shopee Open API ไม่พร้อมใช้งาน — redirect ไปหน้า Affiliate Dashboard
+  window.open('https://affiliate.shopee.co.th/report', '_blank');
+  toast('💡 เปิด Shopee Affiliate Dashboard — Copy ข้อมูลมากรอกด้วยตัวเองได้เลยครับ');
+}
+
+function renderShopeeOrders() {
+  const orders = state.shopeeOrders || [];
+  const badge  = document.getElementById('orders-count-badge');
+  const syncEl = document.getElementById('orders-last-sync');
+
+  if (state.perfSyncedAt) {
+    const t = new Date(state.perfSyncedAt).toLocaleString('th-TH', {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+    syncEl.textContent = `อัปเดต ${t}`;
+  }
+
+  if (!orders.length) {
+    document.getElementById('shopee-orders-wrap').innerHTML =
+      `<div class="empty-state" style="padding:24px;"><p>ยังไม่มี Orders ในช่วงเวลานี้</p></div>`;
+    badge.style.display = 'none';
+    return;
+  }
+
+  badge.style.display = 'inline-flex';
+  badge.textContent   = orders.length + ' orders';
+
+  // Status color map
+  const statusColor = {
+    completed:  'badge-green',
+    pending:    'badge-amber',
+    cancelled:  'badge-red',
+    processing: 'badge-blue'
+  };
+  const statusTH = {
+    completed:  '✅ สำเร็จ',
+    pending:    '⏳ รอดำเนินการ',
+    cancelled:  '❌ ยกเลิก',
+    processing: '🔄 กำลังดำเนินการ'
+  };
+
+  document.getElementById('shopee-orders-wrap').innerHTML = `
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>สินค้า</th>
+            <th>ร้านค้า</th>
+            <th>ราคา</th>
+            <th>Commission</th>
+            <th>Status</th>
+            <th>วันที่</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${orders.slice(0, 50).map(o => {
+            const date = o.createTime
+              ? new Date(parseInt(o.createTime) * 1000).toLocaleDateString('th-TH', {day:'numeric',month:'short',year:'2-digit'})
+              : '-';
+            const status = (o.status || '').toLowerCase();
+            return `
+              <tr>
+                <td>
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    ${o.itemImage ? `<img src="${o.itemImage}" style="width:32px;height:32px;object-fit:cover;border-radius:4px;" onerror="this.style.display='none'">` : ''}
+                    <span style="font-size:12px;max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;">${o.itemName || '-'}</span>
+                  </div>
+                </td>
+                <td style="font-size:12px;color:var(--text2);">${o.shopName || '-'}</td>
+                <td style="font-size:12px;">฿${parseFloat(o.priceAfterDiscount || 0).toLocaleString()}</td>
+                <td style="font-weight:700;color:var(--green);">฿${parseFloat(o.estimatedIncome || 0).toFixed(2)}</td>
+                <td><span class="badge ${statusColor[status] || 'badge-blue'}">${statusTH[status] || o.status || '-'}</span></td>
+                <td style="font-size:12px;color:var(--text2);">${date}</td>
+              </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+      ${orders.length > 50 ? `<div style="text-align:center;padding:12px;font-size:12px;color:var(--text3);">แสดง 50 จาก ${orders.length} orders</div>` : ''}
+    </div>
+  `;
+}
+
+function renderTracker() {
+  const tracks = state.tracks;
+
+  // Commission: รวมจาก Shopee API orders (ถ้ามี) + manual
+  const shopeeComm  = state.shopeeSummary?.totalCommission || 0;
+  const shopeeOrders = state.shopeeOrders?.length || 0;
+  const manualClicks = tracks.reduce((s,t) => s+(t.clicks||0), 0);
+  const manualOrders = tracks.reduce((s,t) => s+(t.orders||0), 0);
+  const cvr = manualClicks > 0 ? ((manualOrders/manualClicks)*100).toFixed(1) : 0;
+
+  const totalComm = shopeeComm + tracks.reduce((s,t) => s+(t.commission||0), 0);
+
+  document.getElementById('stat-commission').textContent = '฿' + totalComm.toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2});
+  document.getElementById('stat-commission-sub').textContent = shopeeOrders > 0 ? `จาก Shopee API + manual` : 'ยังไม่ได้ดึงจาก Shopee';
+  document.getElementById('stat-clicks').textContent = shopeeOrders.toLocaleString();
+  document.getElementById('stat-orders').textContent = manualClicks.toLocaleString();
+  document.getElementById('stat-cvr').textContent = cvr + '%';
+
+  // Re-render Shopee orders table if data exists
+  if (state.shopeeOrders?.length) renderShopeeOrders();
+
+  renderCommissionChart();
+  renderPlatformBreakdown();
+  renderTrackerTable();
+}
+
+function renderCommissionChart() {
+  if (!state.tracks.length) return;
+  const last7 = Array.from({length:7}, (_,i) => { const d = new Date(); d.setDate(d.getDate()-(6-i)); return d.toISOString().split('T')[0]; });
+  const data = last7.map(date => ({
+    label: new Date(date).toLocaleDateString('th-TH',{day:'numeric',month:'short'}),
+    value: state.tracks.filter(t => t.date===date).reduce((s,t) => s+(t.commission||0), 0)
+  }));
+  const max = Math.max(...data.map(d => d.value), 1);
+  document.getElementById('commission-chart').innerHTML = `
+    <div style="display:flex;align-items:flex-end;gap:6px;width:100%;height:100%;padding-bottom:22px;">
+      ${data.map(d => `
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;height:100%;justify-content:flex-end;position:relative;">
+          <div style="font-size:10px;color:var(--accent);font-weight:600;margin-bottom:3px;">${d.value>0?'฿'+d.value:''}</div>
+          <div class="bar" style="width:100%;height:${Math.max(4,(d.value/max)*100)}%;">
+            <div class="bar-label">${d.label}</div>
+          </div>
+        </div>`).join('')}
+    </div>`;
+}
+
+function renderPlatformBreakdown() {
+  if (!state.tracks.length) return;
+  const platforms = [
+    { key:'reels', label:'🎬 Reels / Shopee Video' },
+    { key:'facebook', label:'📘 Facebook Page' }
+  ];
+  const total = state.tracks.reduce((s,t) => s+(t.commission||0), 0) || 1;
+  document.getElementById('platform-breakdown').innerHTML = platforms.map(p => {
+    const comm = state.tracks.filter(t => t.platform===p.key).reduce((s,t) => s+(t.commission||0), 0);
+    const orders = state.tracks.filter(t => t.platform===p.key).reduce((s,t) => s+(t.orders||0), 0);
+    return `
+      <div style="margin-bottom:14px;">
+        <div class="row-between" style="margin-bottom:6px;">
+          <span style="font-size:13px;">${p.label}</span>
+          <span style="font-size:13px;font-weight:700;color:var(--accent);">฿${comm.toFixed(2)}</span>
+        </div>
+        <div class="progress-wrap"><div class="progress-fill" style="width:${(comm/total*100).toFixed(1)}%;"></div></div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">${orders} orders · ${(comm/total*100).toFixed(1)}%</div>
+      </div>`;
+  }).join('');
+}
+
+function renderTrackerTable() {
+  if (!state.tracks.length) {
+    document.getElementById('tracker-table-wrap').innerHTML = `<div class="empty-state"><div class="empty-icon">📊</div><p>กด "บันทึกผล" เพื่อเพิ่มข้อมูล</p></div>`;
+    return;
+  }
+  const sorted = [...state.tracks].sort((a,b) => new Date(b.date)-new Date(a.date));
+  document.getElementById('tracker-table-wrap').innerHTML = `
+    <table>
+      <thead><tr><th>สินค้า</th><th>Platform</th><th>วันที่</th><th>คลิก</th><th>Orders</th><th>Commission</th><th></th></tr></thead>
+      <tbody>
+        ${sorted.map(t => `
+          <tr>
+            <td style="font-weight:500;">${t.product}</td>
+            <td>${platformEmoji(t.platform)} ${t.platform}</td>
+            <td>${t.date}</td>
+            <td>${(t.clicks||0).toLocaleString()}</td>
+            <td>${(t.orders||0).toLocaleString()}</td>
+            <td style="font-weight:700;color:var(--green);">฿${(t.commission||0).toFixed(2)}</td>
+            <td><button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="deleteTrack('${t.id}')">🗑️</button></td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+function openTrackModal() {
+  document.getElementById('track-date').value = new Date().toISOString().split('T')[0];
+  document.getElementById('modal-track').classList.add('show');
+}
+
+async function saveTrack() {
+  const product = document.getElementById('track-product').value.trim();
+  if (!product) { toast('⚠️ กรอกชื่อสินค้า'); return; }
+
+  const track = {
+    id: Date.now().toString(),
+    product,
+    platform: document.getElementById('track-platform').value,
+    date: document.getElementById('track-date').value,
+    clicks: parseInt(document.getElementById('track-clicks').value) || 0,
+    orders: parseInt(document.getElementById('track-orders').value) || 0,
+    commission: parseFloat(document.getElementById('track-commission').value) || 0,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+
+  state.tracks.push(track);
+  saveState(state);
+  closeModal('modal-track');
+  renderTracker();
+  toast('✅ บันทึกผลแล้ว');
+
+  // Clear fields
+  ['track-product','track-clicks','track-orders','track-commission'].forEach(id => document.getElementById(id).value = '');
+
+  // Push to Sheets
+  await pushToSheets('Tracker', track);
+}
+
+async function deleteTrack(id) {
+  if (!confirm('ลบข้อมูลนี้?')) return;
+  state.tracks = state.tracks.filter(t => t.id !== id);
+  saveState(state);
+  renderTracker();
+  await deleteFromSheets('Tracker', id);
+  toast('🗑️ ลบข้อมูลแล้ว');
+}
+
+// ═══════════════════════════════════════
+// UTILS
+// ═══════════════════════════════════════
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+function toast(msg, duration = 3000) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => el.classList.remove('show'), duration);
+}
+
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('show'); });
+});
+
+// ═══════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════
+function init() {
+  updateCreditDisplay();
+  renderCalendar();
+
+  if (state.config.sheetsUrl) {
+    setSyncStatus('synced');
+    // Background sync on load
+    syncFromSheets().then(ok => {
+      if (ok) {
+        if (document.getElementById('page-m3').classList.contains('active')) renderCalendar();
+      }
+    });
+  } else {
+    setSyncStatus('disconnected');
+    setTimeout(() => toast('💡 ตั้งค่า Gemini API + Google Sheets ใน Settings ก่อนเริ่มใช้งาน'), 1000);
+  }
+
+  // Auto-sync every 5 minutes
+  setInterval(() => {
+    if (state.config.sheetsUrl && !isSyncing) syncFromSheets();
+  }, 5 * 60 * 1000);
+}
+
+init();
+</script>
+</body>
+</html>

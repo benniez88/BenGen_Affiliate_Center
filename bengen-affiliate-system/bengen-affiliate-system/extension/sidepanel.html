@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BenGen Affiliate</title>
+<style>
+:root {
+  --bg:#0d0a14; --bg2:#1a1025; --bg3:#120c1e; --bg4:#221535;
+  --border:#2e1f45; --border2:#3d2a5e;
+  --p:#8a50b0; --pn:#c87dff; --pk:#ff6ec7;
+  --green:#10b981; --red:#ef4444; --amber:#f59e0b; --blue:#3b82f6;
+  --text:#eef0f8; --text2:#9080b0; --text3:#5a4a70;
+  --font:'Segoe UI','Sarabun',sans-serif;
+  --radius:8px;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);font-size:13px;}
+body{display:flex;flex-direction:column;overflow:hidden;}
+
+/* ── HEADER ── */
+.hdr{display:flex;align-items:center;gap:8px;padding:10px 14px;
+  background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;}
+.hdr-logo{font-size:11px;font-weight:800;background:linear-gradient(90deg,var(--pn),var(--pk));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:.5px;}
+.hdr-mode{font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700;margin-left:2px;}
+.mode-affiliate{background:rgba(245,158,11,.15);color:var(--amber);}
+.mode-shopee{background:rgba(16,185,129,.15);color:var(--green);}
+.mode-none{background:rgba(239,68,68,.15);color:var(--red);}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;transition:background .3s;}
+.dot.ok{background:var(--green);box-shadow:0 0 6px var(--green);}
+.dot.err{background:var(--red);}
+.dot.spin{background:var(--amber);animation:pulse 1s infinite;}
+.hdr-spacer{flex:1;}
+.icon-btn{padding:4px 8px;border-radius:5px;border:1px solid var(--border);
+  background:var(--bg3);color:var(--text2);font-size:11px;cursor:pointer;transition:all .15s;}
+.icon-btn:hover{border-color:var(--pn);color:var(--pn);}
+
+/* ── TABS ── */
+.tabs{display:flex;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0;}
+.tab{flex:1;padding:8px 4px;text-align:center;font-size:11px;font-weight:700;
+  cursor:pointer;color:var(--text2);border-bottom:2px solid transparent;transition:all .15s;}
+.tab.active{color:var(--pn);border-bottom-color:var(--pn);}
+
+/* ── SCROLL AREA ── */
+.scroll{flex:1;overflow-y:auto;overflow-x:hidden;}
+.scroll::-webkit-scrollbar{width:4px;}
+.scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+
+/* ── PANELS ── */
+.panel{display:none;padding:12px 14px;flex-direction:column;gap:10px;}
+.panel.active{display:flex;}
+.settings-panel{display:none;padding:12px 14px;flex-direction:column;gap:10px;}
+
+/* ── CARDS ── */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:12px;}
+.card-title{font-size:11px;font-weight:700;color:var(--pn);margin-bottom:8px;
+  text-transform:uppercase;letter-spacing:.5px;}
+
+/* ── STATUS ROWS ── */
+.row-info,.row-ok,.row-err,.row-warn{display:flex;gap:8px;border-radius:6px;
+  padding:8px 10px;font-size:11px;line-height:1.5;align-items:flex-start;}
+.row-info{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);color:#93c5fd;}
+.row-ok  {background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);color:#6ee7b7;}
+.row-err {background:rgba(239,68,68,.08); border:1px solid rgba(239,68,68,.2); color:#fca5a5;}
+.row-warn{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);color:#fcd34d;}
+
+/* ── PRODUCT CARD ── */
+.prod-card{display:flex;gap:10px;background:var(--bg2);
+  border:1px solid var(--border);border-radius:var(--radius);padding:10px;}
+.prod-img-wrap{width:76px;height:76px;border-radius:7px;overflow:hidden;
+  background:var(--bg3);flex-shrink:0;display:flex;align-items:center;
+  justify-content:center;font-size:28px;position:relative;}
+.prod-img-wrap img{width:100%;height:100%;object-fit:cover;cursor:pointer;}
+.prod-info{flex:1;min-width:0;}
+.prod-name{font-size:12px;font-weight:700;line-height:1.4;margin-bottom:5px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.prod-shop{font-size:10px;color:var(--text2);margin-bottom:4px;}
+.badges{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:5px;}
+.badge{font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;}
+.b-mall{background:rgba(239,68,68,.12);color:#ef4444;}
+.b-pref{background:rgba(59,130,246,.12);color:#60a5fa;}
+.b-star{background:rgba(245,158,11,.12);color:#f59e0b;}
+.b-sold{background:rgba(16,185,129,.12);color:#10b981;}
+.b-disc{background:rgba(239,68,68,.12);color:#ef4444;}
+.b-comm{background:rgba(200,125,255,.12);color:var(--pn);}
+.price-row{display:flex;align-items:baseline;gap:6px;}
+.p-sale{font-size:16px;font-weight:800;color:var(--pn);}
+.p-orig{font-size:11px;color:var(--text3);text-decoration:line-through;}
+
+/* ── GALLERY ── */
+.gallery{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;}
+.gallery img{width:42px;height:42px;object-fit:cover;border-radius:5px;
+  cursor:pointer;border:2px solid var(--border);transition:border-color .15s;}
+.gallery img.active{border-color:var(--pn);}
+.gallery img:hover{border-color:var(--border2);}
+
+/* ── FORM ── */
+label{display:block;font-size:11px;color:var(--text2);margin-bottom:3px;}
+input,select,textarea{width:100%;background:var(--bg3);border:1px solid var(--border);
+  border-radius:6px;color:var(--text);font-family:var(--font);font-size:12px;
+  padding:7px 10px;outline:none;transition:border-color .15s;}
+input:focus,select:focus,textarea:focus{border-color:var(--pn);}
+textarea{resize:vertical;min-height:70px;line-height:1.5;}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.fg{display:flex;flex-direction:column;gap:3px;}
+
+/* ── BUTTONS ── */
+.btn{display:flex;align-items:center;justify-content:center;gap:6px;
+  padding:9px 14px;border-radius:var(--radius);font-family:var(--font);
+  font-size:12px;font-weight:700;cursor:pointer;border:none;
+  transition:all .15s;width:100%;}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
+.btn-primary{background:linear-gradient(135deg,var(--p),var(--pn));color:#fff;}
+.btn-primary:hover:not(:disabled){filter:brightness(1.1);}
+.btn-ghost{background:var(--bg3);color:var(--text);border:1px solid var(--border);}
+.btn-ghost:hover:not(:disabled){border-color:var(--pn);color:var(--pn);}
+.btn-green{background:linear-gradient(135deg,#059669,#10b981);color:#fff;}
+.btn-amber{background:linear-gradient(135deg,#d97706,#f59e0b);color:#000;}
+.btn-google-tts{background:linear-gradient(135deg,#1a73e8,#4285f4);color:#fff;}
+.btn-sm{padding:6px 10px;font-size:11px;}
+.btn + .btn{margin-top:6px;}
+.copy-btn{padding:3px 8px;border-radius:4px;background:var(--bg3);
+  color:var(--text2);border:1px solid var(--border);font-size:10px;cursor:pointer;}
+.copy-btn:hover{border-color:var(--pn);color:var(--pn);}
+
+/* ── SCRIPT SECTION ── */
+.s-label{font-size:11px;font-weight:700;color:var(--pn);margin-bottom:4px;}
+.s-actions{display:flex;gap:6px;margin-top:4px;}
+
+/* ── DIVIDER ── */
+hr{border:none;border-top:1px solid var(--border);margin:4px 0;}
+
+/* ── AUDIO ── */
+audio{width:100%;height:36px;margin-top:6px;display:none;border-radius:6px;}
+
+/* ── LOADING ── */
+.spin{display:inline-block;width:12px;height:12px;border:2px solid var(--border);
+  border-top-color:var(--pn);border-radius:50%;animation:rotate .5s linear infinite;}
+@keyframes rotate{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* ── EMPTY STATE ── */
+.empty{text-align:center;padding:24px 12px;color:var(--text2);}
+.empty-icon{font-size:36px;margin-bottom:8px;}
+.empty-text{font-size:12px;line-height:1.6;}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:10px;left:10px;right:10px;background:var(--bg2);
+  border:1px solid var(--pn);border-radius:var(--radius);padding:9px 12px;
+  font-size:11px;z-index:999;opacity:0;transform:translateY(4px);
+  transition:all .2s;pointer-events:none;box-shadow:0 0 16px rgba(200,125,255,.3);}
+#toast.show{opacity:1;transform:translateY(0);}
+
+/* ── CHAR COUNT ── */
+.char-count{font-size:10px;color:var(--text3);text-align:right;margin-top:2px;}
+.char-count.warn{color:var(--amber);}
+.char-count.over{color:var(--red);}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="dot" id="dot"></div>
+  <div class="hdr-logo">⚡ BENGEN</div>
+  <div class="hdr-mode mode-none" id="mode-badge">—</div>
+  <div class="hdr-spacer"></div>
+  <span id="hdr-status" style="font-size:10px;color:var(--text2);">กำลังตรวจสอบ...</span>
+  <button class="icon-btn" id="btn-settings">⚙️</button>
+</div>
+
+<!-- SETTINGS (hidden by default) -->
+<div class="settings-panel scroll" id="settings-panel">
+  <div class="card-title">⚙️ ตั้งค่า</div>
+
+  <div class="card">
+    <div class="card-title">🤖 Gemini API</div>
+    <div class="fg">
+      <label>API Key</label>
+      <input type="password" id="s-gemini" placeholder="AIza••••••">
+    </div>
+    <div class="fg" style="margin-top:8px;">
+      <label>Model</label>
+      <select id="s-model">
+        <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite (Free · เร็ว)</option>
+        <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+        <option value="gemini-2.5-pro">gemini-2.5-pro (คุณภาพสูง)</option>
+        <option value="custom">✏️ Custom...</option>
+      </select>
+      <input type="text" id="s-model-custom" placeholder="model name" style="display:none;margin-top:6px;">
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📊 Google</div>
+    <div class="fg">
+      <label>Apps Script URL (Sheets + Drive)</label>
+      <input type="text" id="s-sheets" placeholder="https://script.google.com/macros/s/...">
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🎙️ Google AI Studio TTS</div>
+    <div class="info-row">
+      <span>✅</span>
+      <span>ใช้ฟรีผ่าน Web — ไม่ต้องใช้ API Key<br>กด "สร้างเสียง" → Copy บทพากย์ → วางใน AI Studio → Download MP3</span>
+    </div>
+  </div>
+
+  <button class="btn btn-primary" id="btn-save-settings">💾 บันทึก</button>
+  <button class="btn btn-ghost" id="btn-close-settings">✕ ปิด</button>
+</div>
+
+<!-- TABS -->
+<div class="tabs" id="main-tabs">
+  <div class="tab active" id="tab-btn-product">🛍️ สินค้า</div>
+  <div class="tab" id="tab-btn-script">🎬 Content</div>
+</div>
+
+<!-- ══════════ TAB 1: PRODUCT ══════════ -->
+<div class="scroll">
+<div class="panel active" id="tab-product">
+
+  <!-- Status -->
+  <div id="fetch-status" style="display:none;"></div>
+
+  <!-- Empty -->
+  <div class="empty" id="empty-state">
+    <div class="empty-icon">🛍️</div>
+    <div class="empty-text">
+      เปิดหน้าสินค้าใน<br>
+      <strong style="color:var(--pn);">Affiliate Dashboard</strong><br>
+      หรือ <strong style="color:var(--green);">shopee.co.th/product/...</strong><br>
+      แล้วกด "ดึงข้อมูล" ครับ
+    </div>
+  </div>
+
+  <!-- Product Info -->
+  <div id="product-info" style="display:none;flex-direction:column;gap:10px;">
+
+    <!-- Product Card -->
+    <div class="prod-card">
+      <div class="prod-img-wrap" id="img-wrap">🛍️</div>
+      <div class="prod-info">
+        <div class="prod-name" id="p-name">—</div>
+        <div class="prod-shop" id="p-shop"></div>
+        <div class="badges" id="p-badges"></div>
+        <div class="price-row">
+          <span class="p-sale" id="p-sale">—</span>
+          <span class="p-orig" id="p-orig"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gallery -->
+    <div class="gallery" id="gallery" style="display:none;"></div>
+    <button class="btn btn-ghost btn-sm" id="btn-dl-all" style="display:none;">⬇️ Download รูปทั้งหมด</button>
+    <div style="font-size:10px;color:var(--text3);">💡 คลิกรูปเพื่อเลือก · Ctrl+คลิกเพื่อ Download ทีละรูป</div>
+
+    <!-- Form Fields -->
+    <div class="card">
+      <div class="card-title">📝 ข้อมูลเพิ่มเติม</div>
+      <div class="row2" style="gap:8px;">
+        <div class="fg">
+          <label>Commission %</label>
+          <input type="number" id="p-commission" placeholder="เช่น 5" step="0.1">
+        </div>
+        <div class="fg">
+          <label>Commission (บาท)</label>
+          <input type="number" id="p-commission-bath" placeholder="โดยประมาณ" step="0.01">
+        </div>
+      </div>
+      <div class="fg" style="margin-top:8px;">
+        <label>Affiliate Link</label>
+        <div style="display:flex;gap:6px;">
+          <input type="text" id="p-link" placeholder="https://s.shopee.co.th/..." style="flex:1;">
+          <button class="btn btn-ghost btn-sm" id="btn-get-link" style="white-space:nowrap;width:auto;padding:0 10px;">เอาลิงก์</button>
+        </div>
+      </div>
+      <div class="fg" style="margin-top:8px;">
+        <label>Product URL (shopee.co.th)</label>
+        <div style="display:flex;gap:6px;">
+          <input type="text" id="p-product-url" placeholder="https://shopee.co.th/product/..." style="flex:1;">
+          <button class="btn btn-ghost btn-sm" id="btn-fetch-images" style="white-space:nowrap;width:auto;padding:0 10px;">ดึงรูป</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Content Options -->
+    <div class="card">
+      <div class="card-title">🎨 ตั้งค่า Content</div>
+      <div class="row2">
+        <div class="fg">
+          <label>สไตล์</label>
+          <select id="p-tone">
+            <option value="review">⭐ รีวิว</option>
+            <option value="promo">🔥 โปรโมชั่น</option>
+            <option value="lifestyle">✨ Lifestyle</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label>Platform</label>
+          <select id="p-platform">
+            <option value="reels">🎬 Shopee/Reels</option>
+            <option value="facebook">📘 Facebook</option>
+            <option value="both">✨ ทั้งคู่</option>
+          </select>
+        </div>
+      </div>
+      <div class="fg" style="margin-top:8px;">
+        <label>Gemini Model</label>
+        <select id="p-model">
+          <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite (Free)</option>
+          <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+          <option value="gemini-2.5-pro">gemini-2.5-pro</option>
+          <option value="custom">✏️ Custom...</option>
+        </select>
+        <input type="text" id="p-model-custom" placeholder="model name" style="display:none;margin-top:6px;">
+      </div>
+    </div>
+
+  </div><!-- /product-info -->
+
+  <!-- Action Buttons -->
+  <button class="btn btn-ghost" id="btn-fetch">🔍 ดึงข้อมูลสินค้า</button>
+  <button class="btn btn-primary" id="btn-generate" style="display:none;">✨ สร้าง Content + บทพากย์</button>
+  <button class="btn btn-green" id="btn-save" style="display:none;">💾 บันทึกลง Sheets + Drive</button>
+  <div id="save-status" style="display:none;"></div>
+  <div id="gen-status" style="display:none;"></div>
+
+</div><!-- /tab-product -->
+
+<!-- ══════════ TAB 2: CONTENT ══════════ -->
+<div class="panel" id="tab-script">
+
+  <div class="empty" id="script-empty">
+    <div class="empty-icon">🎬</div>
+    <div class="empty-text">สร้าง Content จาก Tab สินค้าก่อนครับ</div>
+  </div>
+
+  <div id="script-output" style="display:none;flex-direction:column;gap:10px;">
+
+    <div class="card">
+      <div class="s-label">🎯 Hook</div>
+      <textarea id="out-hook" rows="2"></textarea>
+      <div class="s-actions"><button class="copy-btn" id="cp-hook">📋 Copy</button></div>
+    </div>
+
+    <div class="card">
+      <div class="s-label">🎬 Script</div>
+      <textarea id="out-script" rows="6"></textarea>
+      <div class="s-actions"><button class="copy-btn" id="cp-script">📋 Copy</button></div>
+    </div>
+
+    <div class="card">
+      <div class="s-label">📝 Caption + Hashtag</div>
+      <textarea id="out-caption" rows="4"></textarea>
+      <div class="s-actions"><button class="copy-btn" id="cp-caption">📋 Copy</button></div>
+    </div>
+
+    <div class="card">
+      <div class="s-label">🎤 บทพากย์</div>
+      <textarea id="out-voice" rows="5"></textarea>
+      <div class="char-count" id="voice-chars">0 / 10,000 chars</div>
+      <div class="s-actions">
+        <button class="copy-btn" id="cp-voice">📋 Copy</button>
+      </div>
+    </div>
+
+    <hr>
+
+    <!-- TTS Options -->
+    <div class="card">
+      <div class="card-title">🔊 สร้างเสียงพากย์</div>
+
+      <button class="btn btn-google-tts" id="btn-google-tts">
+        🎙️ เปิด Google AI Studio TTS + Copy บทพากย์
+      </button>
+
+      <button class="btn btn-ghost" id="btn-browser-tts" style="margin-top:6px;">
+        🔊 ฟัง Browser TTS (ทดสอบ)
+      </button>
+
+      <div class="info-row" style="margin-top:8px;">
+        <span>💡</span>
+        <span>1. กดปุ่มด้านบน → บทพากย์ถูก Copy อัตโนมัติ<br>
+        2. วางใน AI Studio → เลือกเสียง → Generate<br>
+        3. Download MP3 → Upload ขึ้น Drive โฟลเดอร์สินค้า</span>
+      </div>
+    </div>
+
+    <hr>
+
+    <!-- Final Actions -->
+    <button class="btn btn-ghost" id="btn-regen">🔄 Generate ใหม่</button>
+
+  </div><!-- /script-output -->
+
+</div><!-- /tab-script -->
+</div><!-- /scroll -->
+
+<div id="toast"></div>
+<script src="sidepanel.js"></script>
+</body>
+</html>
