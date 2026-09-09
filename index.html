@@ -317,6 +317,7 @@ canvas{width:100%;max-width:270px;display:block;margin:0 auto;
       <span style="font-size:11px;color:var(--text2);">ความยาวรวม: </span>
       <span style="font-size:20px;font-weight:800;color:var(--pn);" id="est-dur">— วิ</span>
     </div>
+    <div id="duration-warning" class="warn-row" style="display:none;margin-top:8px;"></div>
   </div>
 
   <!-- Export -->
@@ -979,7 +980,19 @@ function getScenes() {
 function buildTimeline() {
   const scenes = getScenes();
   const total  = scenes.reduce((s, sc) => s + sc.dur, 0);
-  document.getElementById('est-dur').textContent = total + ' วิ';
+  document.getElementById('est-dur').textContent = total.toFixed(1) + ' วิ';
+
+  // เช็คเพดาน Shopee Video: 3-30 วิ — เกินจะถูกตัดท้ายอัตโนมัติ เลือกจุดตัดไม่ได้
+  const warnEl = document.getElementById('duration-warning');
+  if (total > 30) {
+    warnEl.style.display = 'flex';
+    warnEl.innerHTML = `<span>⚠️</span><span>ยาวเกิน 30 วิ (Shopee Video กำหนด 3-30 วิ) — Shopee จะตัดท้ายอัตโนมัติแบบเลือกจุดไม่ได้ อาจตัด CTA หายไป! ลองลด Padding หรือย่อบทพากย์ให้สั้นลงครับ</span>`;
+  } else if (total < 3) {
+    warnEl.style.display = 'flex';
+    warnEl.innerHTML = `<span>⚠️</span><span>สั้นกว่า 3 วิ — Shopee Video กำหนดขั้นต่ำ 3 วิ วิดีโอจะถูกยืดอัตโนมัติ</span>`;
+  } else {
+    warnEl.style.display = 'none';
+  }
 
   const colors = {
     logo:    'background:linear-gradient(90deg,#4d3357,#8a50b0);color:white;',
@@ -1406,9 +1419,19 @@ async function remuxForSeekable(blob, ext) {
   ffmpeg.FS('writeFile', inputName, await fetchFile(blob));
 
   if (ext === 'mp4') {
-    // Remux อย่างเดียว ไม่ re-encode — เร็วมาก คุณภาพเท่าเดิมเป๊ะ
+    // Re-encode วิดีโอเป็น H.264 High Profile + Level 4.0 (มาตรฐาน Shopee Video กำหนด)
+    // MediaRecorder ส่งมาเป็น "Constrained Baseline" ซึ่ง Shopee แนะนำว่าอาจทำให้
+    // "extended processing" — ต้องเป็น High Profile ถึงจะมาตรฐานเต็มที่
+    // แปลงเสียงเป็น AAC ด้วย (MediaRecorder ใช้ Opus ซึ่ง Shopee App ไม่รองรับ)
     // -movflags +faststart ย้าย moov atom มาไว้หน้าไฟล์ + สร้าง seek table ที่ถูกต้อง
-    await ffmpeg.run('-i', inputName, '-c', 'copy', '-movflags', '+faststart', outputName);
+    await ffmpeg.run(
+      '-i', inputName,
+      '-c:v', 'libx264', '-profile:v', 'high', '-level:v', '4.0',
+      '-preset', 'veryfast', '-crf', '20',
+      '-c:a', 'aac', '-b:a', '128k',
+      '-movflags', '+faststart',
+      outputName
+    );
   } else {
     // ไฟล์เป็น webm (บาง browser ไม่รองรับ mp4 output) — ต้อง re-encode เป็น h264/aac
     // เพื่อให้เล่นได้ทั้ง Shopee App และ Video Player ทั่วไป
@@ -1614,7 +1637,7 @@ async function exportVideo() {
   // ── Remux ด้วย ffmpeg.wasm ให้ Seek ได้ ──
   // MediaRecorder สร้างไฟล์แบบ "live stream" ไม่มี seek table (moov atom) ที่ถูกต้อง
   // ทำให้เลื่อนวิดีโอไปมาไม่ได้ในหลาย Player (รวม Shopee App)
-  // แก้โดย Remux ใหม่ผ่าน ffmpeg.wasm — เร็วเพราะไม่ต้อง re-encode (ใช้ -c copy)
+  // แก้โดย Remux + Re-encode ผ่าน ffmpeg.wasm — H.264 High Profile + AAC ตามมาตรฐาน Shopee Video
   document.getElementById('prog-text').textContent = '🔧 กำลังโหลด Engine แก้ไฟล์... (ครั้งแรกอาจใช้เวลา 10-30 วิ)';
   document.getElementById('prog-fill').style.width  = '100%';
 
