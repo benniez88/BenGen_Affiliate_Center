@@ -1394,7 +1394,14 @@ function drawScene(sc, alpha) {
 let ffmpegInstance = null;
 
 async function getFFmpeg() {
-  if (ffmpegInstance) return ffmpegInstance;
+  // สำคัญ: ffmpeg.wasm 0.11.x รัน run() ได้แค่ครั้งเดียวต่อ 1 instance เท่านั้น
+  // ถ้าใช้ instance เดิมซ้ำในการ Export ครั้งที่ 2 จะพังด้วย "Program terminated with exit(0)"
+  // จึงต้อง .exit() instance เก่าทิ้ง แล้วสร้างใหม่ทุกครั้งที่เรียก
+  if (ffmpegInstance) {
+    try { ffmpegInstance.exit(); } catch(e) {}
+    ffmpegInstance = null;
+  }
+
   if (typeof FFmpeg === 'undefined') throw new Error('ffmpeg.wasm โหลดไม่สำเร็จ (ตรวจสอบอินเทอร์เน็ต)');
 
   const { createFFmpeg } = FFmpeg;
