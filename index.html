@@ -519,20 +519,40 @@ async function loadImagesFromDrive() {
     const products = data.rows || [];
 
     const product = products.find(p => p.id === selectedProduct.productId);
-    if (!product?.driveFolderUrl) throw new Error('ไม่พบ Drive Folder ของสินค้านี้');
+    let folderId = product?.driveFolderUrl
+      ? product.driveFolderUrl.match(/folders\/([^?]+)/)?.[1]
+      : null;
 
-    // ดึง Folder ID จาก URL
-    const folderId = product.driveFolderUrl.match(/folders\/([^?]+)/)?.[1];
-    if (!folderId) throw new Error('ไม่สามารถแยก Folder ID ได้');
-
-    setLoadStatus('info', 'กำลังดึงรูปจาก Drive...');
-
-    // ดึงรายการไฟล์รูปจาก Drive ผ่าน Apps Script
     setLoadStatus('info', 'กำลังดึงรูปจาก Drive... (อาจใช้เวลาสักครู่)');
-    const imgData = await xhrGet(`${appsUrl}?action=getDriveImages&folderId=${folderId}`);
-    const imgList = imgData.images || imgData.imageUrls || [];
+    let imgData = null;
 
-    if (!imgList.length) throw new Error('ไม่พบรูปในโฟลเดอร์นี้ — ตรวจว่า folderId ถูกต้อง');
+    if (folderId) {
+      imgData = await xhrGet(`${appsUrl}?action=getDriveImages&folderId=${folderId}`);
+      if (imgData.error) console.warn('getDriveImages error:', imgData.error);
+    }
+
+    let imgList = imgData?.images || [];
+
+    // ── Fallback: ถ้าไม่เจอรูป ลองค้นหาโฟลเดอร์จากชื่อสินค้าแทน ──
+    if (!imgList.length) {
+      setLoadStatus('info', 'ไม่เจอรูปจาก URL เดิม — กำลังค้นหาโฟลเดอร์จากชื่อสินค้า...');
+      const findRes = await xhrGet(
+        `${appsUrl}?action=findFolderByProduct&productId=${encodeURIComponent(selectedProduct.productId)}&name=${encodeURIComponent(selectedProduct.productName||'')}`
+      );
+      if (findRes.found && findRes.folder?.id) {
+        folderId = findRes.folder.id;
+        imgData  = await xhrGet(`${appsUrl}?action=getDriveImages&folderId=${folderId}`);
+        imgList  = imgData?.images || [];
+      }
+    }
+
+    if (!imgList.length) {
+      const debugInfo = imgData
+        ? ` (โฟลเดอร์ "${imgData.folderName||'?'}" มี ${imgData.totalFilesInFolder||0} ไฟล์: ${(imgData.allFileNames||[]).slice(0,5).join(', ')})`
+        : '';
+      const folderLink = folderId ? `https://drive.google.com/drive/folders/${folderId}` : '';
+      throw new Error(`ไม่พบรูปในโฟลเดอร์${debugInfo}${folderLink ? ' — เปิดดู: '+folderLink : ''}`);
+    }
 
     // โหลดรูปเป็น HTMLImageElement จาก Base64 ที่ Apps Script ส่งมา
     imgs = [];
@@ -600,20 +620,39 @@ async function loadVoiceFromDrive() {
                   || mp3Url.match(/\/d\/([^/]+)\//)?.[1] || '';
 
     let blob2;
+    let lastErr = '';
+
     if (fileId && appsUrl2) {
       setLoadStatus('info', 'กำลังดึงไฟล์เสียงผ่าน Apps Script...');
       const resp = await xhrGet(`${appsUrl2}?action=proxyAudio&fileId=${fileId}`);
+      if (resp.error) lastErr = resp.error;
       const b64src = resp.base64 || '';
       if (b64src && b64src.startsWith('data:')) {
-        const arr  = b64src.split(',');
-        const mime = arr[0].match(/:(.*?);/)[1];
-        const bstr = atob(arr[1]);
-        const u8   = new Uint8Array(bstr.length);
-        for (let i = 0; i < bstr.length; i++) u8[i] = bstr.charCodeAt(i);
-        blob2 = new Blob([u8], { type: mime });
+        blob2 = base64ToBlob(b64src);
       }
     }
-    if (!blob2 || blob2.size === 0) throw new Error('โหลดไฟล์เสียงไม่ได้ — ตรวจสอบ fileId หรือ Deploy Apps Script ใหม่');
+
+    // ── Fallback: ถ้า fileId เดิมใช้ไม่ได้ ลองค้นหาจากชื่อสินค้าแทน ──
+    if (!blob2 || blob2.size === 0) {
+      setLoadStatus('info', 'ไม่เจอไฟล์เดิม — กำลังค้นหาไฟล์เสียงจากชื่อสินค้า...');
+      const findRes = await xhrGet(
+        `${appsUrl2}?action=findAudioByProduct&productId=${encodeURIComponent(selectedProduct.productId)}&name=${encodeURIComponent(selectedProduct.productName||'')}`
+      );
+      if (findRes.found && findRes.file?.id) {
+        const resp2 = await xhrGet(`${appsUrl2}?action=proxyAudio&fileId=${findRes.file.id}`);
+        if (resp2.error) lastErr = resp2.error;
+        if (resp2.base64 && resp2.base64.startsWith('data:')) {
+          blob2 = base64ToBlob(resp2.base64);
+        }
+      } else if (findRes.message) {
+        lastErr = findRes.message;
+      }
+    }
+
+    if (!blob2 || blob2.size === 0) {
+      throw new Error(lastErr || 'โหลดไฟล์เสียงไม่ได้ — ตรวจสอบว่า Deploy Apps Script เวอร์ชันล่าสุดแล้วหรือยัง');
+    }
+
     voiceUrl  = URL.createObjectURL(blob2);
     voiceFile = new File([blob2], 'voiceover.wav', { type: blob2.type });
 
@@ -635,13 +674,22 @@ async function loadVoiceFromDrive() {
     voiceUrl = '';
     document.getElementById('voice-status').textContent = '❌ โหลดเสียงไม่สำเร็จ: ' + err.message;
     document.getElementById('voice-status').className   = 'status err';
-    setLoadStatus('err', '❌ ' + err.message + ' — ลอง Deploy Apps Script ใหม่ (New version) แล้วลองอีกครั้ง');
+    setLoadStatus('err', '❌ ' + err.message);
     toast('❌ โหลดเสียงไม่สำเร็จ — ดูรายละเอียดด้านซ้าย');
     console.error('loadVoiceFromDrive error:', err);
   }
 
   btn.innerHTML = '🎙️ โหลดเสียงจาก Drive';
   btn.disabled  = false;
+}
+
+function base64ToBlob(b64src) {
+  const arr  = b64src.split(',');
+  const mime = arr[0].match(/:(.*?);/)[1];
+  const bstr = atob(arr[1]);
+  const u8   = new Uint8Array(bstr.length);
+  for (let i = 0; i < bstr.length; i++) u8[i] = bstr.charCodeAt(i);
+  return new Blob([u8], { type: mime });
 }
 
 function setLoadStatus(type, msg) {
