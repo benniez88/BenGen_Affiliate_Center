@@ -8,7 +8,7 @@
 | ไฟล์ / โฟลเดอร์ | หน้าที่ |
 |---|---|
 | `affiliate-command-center-v2.html` | หน้า Command Center (standalone, เรียก Gemini + Apps Script) |
-| `bengen-template-v3.html` | Video Template + อัปโหลดขึ้น Drive |
+| `index.html` | Video Template + อัปโหลดขึ้น Drive (เดิมชื่อ `bengen-template-v3.html`) |
 | `Code.gs` | Google Apps Script backend |
 | `bengen-extension/` | Chrome Extension (Side Panel) — ดึงข้อมูลสินค้าจาก Shopee |
 | `bengen-affiliate-system/` | แพ็กเกจรวม (extension + apps-script + video template) |
