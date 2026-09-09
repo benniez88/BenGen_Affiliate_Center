@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>BenGen Video Template v3</title>
+<!-- ffmpeg.wasm — ใช้ Remux วิดีโอให้ Seek ได้ (แก้ปัญหา MediaRecorder output ไม่มี seek table) -->
+<script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800;900&family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -1371,6 +1373,58 @@ function drawScene(sc, alpha) {
   else                      drawProduct(sc.img||null, alpha);
 }
 
+// ═══════════════════════════════════════
+// REMUX VIDEO — แก้ไฟล์ให้ Seek ได้ด้วย ffmpeg.wasm
+// MediaRecorder output ไม่มี seek table (moov atom) วางถูกตำแหน่ง
+// ต้อง Remux ใหม่เพื่อให้เลื่อนวิดีโอไปมาได้ในทุก Player
+// ═══════════════════════════════════════
+let ffmpegInstance = null;
+
+async function getFFmpeg() {
+  if (ffmpegInstance) return ffmpegInstance;
+  if (typeof FFmpeg === 'undefined') throw new Error('ffmpeg.wasm โหลดไม่สำเร็จ (ตรวจสอบอินเทอร์เน็ต)');
+
+  const { createFFmpeg } = FFmpeg;
+  ffmpegInstance = createFFmpeg({
+    log: false,
+    corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
+  });
+  await ffmpegInstance.load();
+  return ffmpegInstance;
+}
+
+async function remuxForSeekable(blob, ext) {
+  const ffmpeg = await getFFmpeg();
+  const { fetchFile } = FFmpeg;
+
+  const inputName  = 'input.' + ext;
+  const outputName = 'output.mp4';
+
+  ffmpeg.FS('writeFile', inputName, await fetchFile(blob));
+
+  if (ext === 'mp4') {
+    // Remux อย่างเดียว ไม่ re-encode — เร็วมาก คุณภาพเท่าเดิมเป๊ะ
+    // -movflags +faststart ย้าย moov atom มาไว้หน้าไฟล์ + สร้าง seek table ที่ถูกต้อง
+    await ffmpeg.run('-i', inputName, '-c', 'copy', '-movflags', '+faststart', outputName);
+  } else {
+    // ไฟล์เป็น webm (บาง browser ไม่รองรับ mp4 output) — ต้อง re-encode เป็น h264/aac
+    // เพื่อให้เล่นได้ทั้ง Shopee App และ Video Player ทั่วไป
+    await ffmpeg.run(
+      '-i', inputName,
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20',
+      '-c:a', 'aac', '-b:a', '128k',
+      '-movflags', '+faststart',
+      outputName
+    );
+  }
+
+  const data = ffmpeg.FS('readFile', outputName);
+  ffmpeg.FS('unlink', inputName);
+  ffmpeg.FS('unlink', outputName);
+
+  return new Blob([data.buffer], { type: 'video/mp4' });
+}
+
 async function exportVideo() {
   if(!imgs.length) { toast('⚠️ เพิ่มรูปสินค้าก่อนครับ'); return; }
 
@@ -1544,20 +1598,35 @@ async function exportVideo() {
 
   if(audioCtx) audioCtx.close().catch(() => {});
 
-  // ── Build Blob ──
+  // ── Build Raw Blob จาก MediaRecorder ──
   const ext  = mime.includes('mp4') ? 'mp4' : 'webm';
-  exportedBlob = new Blob(chunks, { type: mime });
+  const rawBlob = new Blob(chunks, { type: mime });
 
-  if(!exportedBlob.size) {
+  if(!rawBlob.size) {
     toast('❌ Export ล้มเหลว — ลองใหม่อีกครั้งครับ');
     btn.disabled=false; btn.textContent='🎬 Export MP4';
     return;
   }
 
+  // ── Remux ด้วย ffmpeg.wasm ให้ Seek ได้ ──
+  // MediaRecorder สร้างไฟล์แบบ "live stream" ไม่มี seek table (moov atom) ที่ถูกต้อง
+  // ทำให้เลื่อนวิดีโอไปมาไม่ได้ในหลาย Player (รวม Shopee App)
+  // แก้โดย Remux ใหม่ผ่าน ffmpeg.wasm — เร็วเพราะไม่ต้อง re-encode (ใช้ -c copy)
+  document.getElementById('prog-text').textContent = '🔧 กำลังแก้ไฟล์ให้เลื่อนวิดีโอได้... (ครั้งแรกอาจใช้เวลา 10-30 วิ)';
+  document.getElementById('prog-fill').style.width  = '100%';
+
+  try {
+    exportedBlob = await remuxForSeekable(rawBlob, ext);
+  } catch(e) {
+    console.warn('Remux failed, ใช้ไฟล์ดิบแทน:', e);
+    exportedBlob = rawBlob; // Fallback — ยังเล่นได้ปกติ แต่ seek อาจไม่ลื่น
+    toast('⚠️ แก้ไฟล์อัตโนมัติไม่สำเร็จ — ใช้ไฟล์ต้นฉบับแทน (อาจ seek ไม่ได้เต็มที่)');
+  }
+
   const url = URL.createObjectURL(exportedBlob);
   const dl  = document.getElementById('dl-btn');
   dl.href     = url;
-  dl.download = 'bengen-video-' + Date.now() + '.' + ext;
+  dl.download = 'bengen-video-' + Date.now() + '.mp4';
 
   document.getElementById('dl-wrap').style.display         = 'block';
   document.getElementById('prog-fill').style.width         = '100%';
@@ -1570,7 +1639,7 @@ async function exportVideo() {
   player.play().catch(() => {});
 
   btn.disabled=false; btn.textContent='🎬 Export MP4';
-  toast(`✅ Export เสร็จ! (${(exportedBlob.size/1024/1024).toFixed(1)} MB)`);
+  toast(`✅ Export เสร็จ! (${(exportedBlob.size/1024/1024).toFixed(1)} MB) — เลื่อนวิดีโอได้ปกติแล้ว`);
 
 }
 
