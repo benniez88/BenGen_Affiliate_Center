@@ -850,10 +850,17 @@ async function loadBgmListFromDrive() {
     bgmFilesList = data.files || [];
     const sel = document.getElementById('bgm-preset');
     sel.innerHTML = '<option value="">— ไม่ใช้เพลง —</option>' +
-      bgmFilesList.map(f => `<option value="${f.id}">🎵 ${f.name} (${f.sizeKB}KB)</option>`).join('');
+      bgmFilesList.map(f =>
+        `<option value="${f.id}" ${f.tooLarge ? 'style="color:#ef4444;"' : ''}>
+          ${f.tooLarge ? '⚠️' : '🎵'} ${f.name} (${f.sizeMB || (f.sizeKB/1024).toFixed(1)} MB)${f.tooLarge ? ' — ใหญ่เกินไป' : ''}
+        </option>`
+      ).join('');
 
+    const okCount = bgmFilesList.filter(f => !f.tooLarge).length;
     document.getElementById('bgm-drive-status').textContent =
-      bgmFilesList.length ? `✅ พบ ${bgmFilesList.length} เพลง` : '⚠️ ไม่พบไฟล์เพลงในโฟลเดอร์';
+      bgmFilesList.length
+        ? `✅ พบ ${bgmFilesList.length} เพลง (ใช้ได้ ${okCount} เพลง — ไฟล์เกิน 15MB จะติด ⚠️)`
+        : '⚠️ ไม่พบไฟล์เพลงในโฟลเดอร์';
     document.getElementById('bgm-drive-status').className =
       bgmFilesList.length ? 'status ok' : 'status';
     toast(`✅ โหลดรายชื่อเพลง ${bgmFilesList.length} ไฟล์แล้ว`);
@@ -876,6 +883,18 @@ async function onBgmPresetSelect() {
   if (!appsUrl) { toast('⚠️ ใส่ Apps Script URL ก่อนครับ'); return; }
 
   const picked = bgmFilesList.find(f => f.id === fileId);
+
+  // เช็คขนาดก่อน — ถ้าใหญ่เกินไปแจ้งทันทีไม่ต้องรอโหลด
+  if (picked?.tooLarge) {
+    bgmFile = null;
+    document.getElementById('bgm-status').textContent =
+      `❌ "${picked.name}" ใหญ่เกินไป (${picked.sizeMB} MB) — เลือกไฟล์ที่เล็กกว่า 15MB หรือตัดคลิปให้สั้นลงครับ`;
+    document.getElementById('bgm-status').className = 'status err';
+    toast('❌ ไฟล์นี้ใหญ่เกินไป — เลือกไฟล์อื่นครับ');
+    this.value = '';
+    return;
+  }
+
   document.getElementById('bgm-status').innerHTML = '<span class="spin"></span> กำลังโหลด "' + (picked?.name||'') + '"...';
 
   try {
