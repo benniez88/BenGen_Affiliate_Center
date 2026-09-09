@@ -171,15 +171,15 @@ canvas{width:100%;max-width:270px;display:block;margin:0 auto;
 
   <!-- BGM -->
   <div class="card">
-    <div class="card-title">🎵 BGM</div>
-    <div class="fg"><label>Preset</label>
+    <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+      <span>🎵 BGM</span>
+      <button class="btn btn-ghost" id="btn-load-bgm" style="width:auto;padding:4px 10px;font-size:11px;">🔄 โหลดเพลง</button>
+    </div>
+    <div class="fg"><label>เลือกเพลงจาก Drive</label>
       <select id="bgm-preset">
-        <option value="">— ไม่ใช้ Preset —</option>
-        <option value="hype">🔥 Hype Beat</option>
-        <option value="chill">😎 Chill Vibes</option>
-        <option value="kpop">💜 K-Style</option>
-        <option value="luxury">💎 Luxury</option>
+        <option value="">— ไม่ใช้เพลง —</option>
       </select>
+      <div class="status" id="bgm-drive-status">กด "โหลดเพลง" เพื่อดึงรายชื่อจาก Drive</div>
     </div>
     <div class="fg mt6"><label>หรืออัปโหลดเพลงเอง</label>
       <input type="file" id="bgm-upload" accept=".mp3,.m4a,.wav">
@@ -372,6 +372,8 @@ const W = 1080, H = 1920, BAR_H = Math.floor(H * 0.15);
 let imgs      = [];   // HTMLImageElement[]
 let logoVid   = null;
 let bgmFile   = null;
+const BGM_FOLDER_ID = '1P_nZH62RdCCsGsEvrxcD14k4TIlgt_Yu'; // โฟลเดอร์ BGM ใน Drive
+let bgmFilesList = []; // รายชื่อไฟล์ BGM จาก Drive {id, name, sizeKB}
 let voiceFile = null;
 let voiceUrl  = '';   // Drive URL หรือ blob URL
 let voiceDurationSec = 0; // ความยาวเสียงพากย์ (วินาที)
@@ -823,9 +825,78 @@ document.getElementById('logo-upload').addEventListener('change', function() {
 document.getElementById('bgm-upload').addEventListener('change', function() {
   const f = this.files[0]; if (!f) return;
   bgmFile = f;
+  document.getElementById('bgm-preset').value = ''; // เคลียร์ dropdown เพราะใช้ไฟล์อัปโหลดแทน
   document.getElementById('bgm-status').textContent = '✅ ' + f.name;
   document.getElementById('bgm-status').className   = 'status ok';
+  toast('✅ โหลด BGM จากไฟล์แล้ว');
 });
+
+document.getElementById('btn-load-bgm').addEventListener('click', loadBgmListFromDrive);
+document.getElementById('bgm-preset').addEventListener('change', onBgmPresetSelect);
+
+async function loadBgmListFromDrive() {
+  const appsUrl = document.getElementById('apps-script-url').value.trim();
+  if (!appsUrl) { toast('⚠️ ใส่ Apps Script URL ก่อนครับ'); return; }
+
+  const btn = document.getElementById('btn-load-bgm');
+  btn.innerHTML = '<span class="spin"></span>';
+  btn.disabled  = true;
+  document.getElementById('bgm-drive-status').textContent = 'กำลังโหลดรายชื่อเพลง...';
+
+  try {
+    const data = await xhrGet(`${appsUrl}?action=listDriveAudio&folderId=${BGM_FOLDER_ID}`);
+    if (data.error) throw new Error(data.error);
+
+    bgmFilesList = data.files || [];
+    const sel = document.getElementById('bgm-preset');
+    sel.innerHTML = '<option value="">— ไม่ใช้เพลง —</option>' +
+      bgmFilesList.map(f => `<option value="${f.id}">🎵 ${f.name} (${f.sizeKB}KB)</option>`).join('');
+
+    document.getElementById('bgm-drive-status').textContent =
+      bgmFilesList.length ? `✅ พบ ${bgmFilesList.length} เพลง` : '⚠️ ไม่พบไฟล์เพลงในโฟลเดอร์';
+    document.getElementById('bgm-drive-status').className =
+      bgmFilesList.length ? 'status ok' : 'status';
+    toast(`✅ โหลดรายชื่อเพลง ${bgmFilesList.length} ไฟล์แล้ว`);
+
+  } catch (err) {
+    document.getElementById('bgm-drive-status').textContent = '❌ ' + err.message;
+    document.getElementById('bgm-drive-status').className   = 'status err';
+    toast('❌ โหลดรายชื่อเพลงไม่สำเร็จ');
+  }
+
+  btn.innerHTML = '🔄 โหลดเพลง';
+  btn.disabled  = false;
+}
+
+async function onBgmPresetSelect() {
+  const fileId = this.value;
+  if (!fileId) { bgmFile = null; document.getElementById('bgm-status').textContent = 'ยังไม่ได้เลือก'; document.getElementById('bgm-status').className='status'; return; }
+
+  const appsUrl = document.getElementById('apps-script-url').value.trim();
+  if (!appsUrl) { toast('⚠️ ใส่ Apps Script URL ก่อนครับ'); return; }
+
+  const picked = bgmFilesList.find(f => f.id === fileId);
+  document.getElementById('bgm-status').innerHTML = '<span class="spin"></span> กำลังโหลด "' + (picked?.name||'') + '"...';
+
+  try {
+    const resp = await xhrGet(`${appsUrl}?action=proxyAudio&fileId=${fileId}`);
+    if (resp.error) throw new Error(resp.error);
+    if (!resp.base64) throw new Error('ไม่ได้รับข้อมูลเพลง');
+
+    const blob = base64ToBlob(resp.base64);
+    bgmFile = blob; // Blob ใช้แทน File ได้ (มี arrayBuffer() เหมือนกัน)
+
+    document.getElementById('bgm-status').textContent = '✅ ' + (picked?.name || resp.name || 'BGM') + ' (จาก Drive)';
+    document.getElementById('bgm-status').className   = 'status ok';
+    toast('✅ โหลดเพลง "' + (picked?.name||'') + '" แล้ว');
+
+  } catch (err) {
+    bgmFile = null;
+    document.getElementById('bgm-status').textContent = '❌ ' + err.message;
+    document.getElementById('bgm-status').className   = 'status err';
+    toast('❌ โหลดเพลงไม่สำเร็จ: ' + err.message);
+  }
+}
 
 // Input change → redraw
 ['hook-text','price-orig','price-sale','cta-text','text-style'].forEach(id => {
@@ -1522,7 +1593,10 @@ async function uploadToDrive() {
 
     const resp = await fetch(appsUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      // สำคัญ: ใช้ text/plain แทน application/json เพื่อหลีกเลี่ยง CORS Preflight
+      // Apps Script ไม่รองรับ OPTIONS preflight — text/plain เป็น "simple request" ไม่ต้อง preflight
+      // Apps Script ยัง parse JSON ได้ปกติจาก e.postData.contents ไม่ว่า header จะเป็นอะไร
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({
         action:      'uploadVideo',
         productId:   pid,
