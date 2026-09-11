@@ -100,6 +100,7 @@ label{display:block;font-size:11px;color:var(--text2);margin-bottom:3px;}
 input,select,textarea{width:100%;background:var(--bg3);border:1px solid var(--border);
   border-radius:6px;color:var(--text);font-family:var(--font);font-size:12px;
   padding:7px 10px;outline:none;transition:border-color .15s;}
+input[type=checkbox]{width:16px;height:16px;padding:0;flex-shrink:0;accent-color:var(--pn);cursor:pointer;}
 input:focus,select:focus,textarea:focus{border-color:var(--pn);}
 textarea{resize:vertical;min-height:70px;line-height:1.5;}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
@@ -118,6 +119,7 @@ textarea{resize:vertical;min-height:70px;line-height:1.5;}
 .btn-green{background:linear-gradient(135deg,#059669,#10b981);color:#fff;}
 .btn-amber{background:linear-gradient(135deg,#d97706,#f59e0b);color:#000;}
 .btn-google-tts{background:linear-gradient(135deg,#1a73e8,#4285f4);color:#fff;}
+.btn-blue{background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#fff;}
 .btn-sm{padding:6px 10px;font-size:11px;}
 .btn + .btn{margin-top:6px;}
 .copy-btn{padding:3px 8px;border-radius:4px;background:var(--bg3);
@@ -202,7 +204,7 @@ audio{width:100%;height:36px;margin-top:6px;display:none;border-radius:6px;}
 
   <div class="card">
     <div class="card-title">🎙️ Google AI Studio TTS</div>
-    <div class="info-row">
+    <div class="row-info">
       <span>✅</span>
       <span>ใช้ฟรีผ่าน Web — ไม่ต้องใช้ API Key<br>กด "สร้างเสียง" → Copy บทพากย์ → วางใน AI Studio → Download MP3</span>
     </div>
@@ -216,6 +218,7 @@ audio{width:100%;height:36px;margin-top:6px;display:none;border-radius:6px;}
 <div class="tabs" id="main-tabs">
   <div class="tab active" id="tab-btn-product">🛍️ สินค้า</div>
   <div class="tab" id="tab-btn-script">🎬 Content</div>
+  <div class="tab" id="tab-btn-voice">🎙️ เสียง</div>
 </div>
 
 <!-- ══════════ TAB 1: PRODUCT ══════════ -->
@@ -256,7 +259,7 @@ audio{width:100%;height:36px;margin-top:6px;display:none;border-radius:6px;}
     <!-- Gallery -->
     <div class="gallery" id="gallery" style="display:none;"></div>
     <button class="btn btn-ghost btn-sm" id="btn-dl-all" style="display:none;">⬇️ Download รูปทั้งหมด</button>
-    <div style="font-size:10px;color:var(--text3);">💡 คลิกรูปเพื่อเลือก · Ctrl+คลิกเพื่อ Download ทีละรูป</div>
+    <div style="font-size:10px;color:var(--text3);">💡 คลิกรูปเพื่อดู · Ctrl+คลิก Download · กด × มุมขวาบนเพื่อไม่ใช้รูปนั้น</div>
 
     <!-- Form Fields -->
     <div class="card">
@@ -370,23 +373,11 @@ audio{width:100%;height:36px;margin-top:6px;display:none;border-radius:6px;}
 
     <hr>
 
-    <!-- TTS Options -->
     <div class="card">
-      <div class="card-title">🔊 สร้างเสียงพากย์</div>
-
-      <button class="btn btn-google-tts" id="btn-google-tts">
-        🎙️ เปิด Google AI Studio TTS + Copy บทพากย์
-      </button>
-
-      <button class="btn btn-ghost" id="btn-browser-tts" style="margin-top:6px;">
-        🔊 ฟัง Browser TTS (ทดสอบ)
-      </button>
-
-      <div class="info-row" style="margin-top:8px;">
-        <span>💡</span>
-        <span>1. กดปุ่มด้านบน → บทพากย์ถูก Copy อัตโนมัติ<br>
-        2. วางใน AI Studio → เลือกเสียง → Generate<br>
-        3. Download MP3 → Upload ขึ้น Drive โฟลเดอร์สินค้า</span>
+      <div class="card-title">🎙️ สร้างเสียงพากย์</div>
+      <div class="row-info">
+        <span>👉</span>
+        <span>ไปที่ Tab <strong>"🎙️ เสียง"</strong> ด้านบนเพื่อ Generate เสียงพากย์และ Upload ขึ้น Drive ได้เลยครับ</span>
       </div>
     </div>
 
@@ -398,6 +389,181 @@ audio{width:100%;height:36px;margin-top:6px;display:none;border-radius:6px;}
   </div><!-- /script-output -->
 
 </div><!-- /tab-script -->
+
+<!-- ═══ TAB 3: VOICE (TTS) ═══ -->
+<div class="panel" id="tab-voice">
+
+  <!-- โหลดจาก Sheets — ทำงานอิสระ ไม่ต้องพึ่ง Session ปัจจุบัน -->
+  <div class="card">
+    <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+      <span>📊 โหลดจาก Sheets</span>
+      <button class="btn btn-ghost" id="btn-load-voice-list" style="width:auto;padding:5px 10px;font-size:11px;">🔄 โหลดรายการ</button>
+    </div>
+    <div id="voice-list-status" style="display:none;"></div>
+    <div id="voice-pick-list" style="display:none;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto;margin-top:8px;"></div>
+
+    <!-- Batch Controls — แสดงเมื่อติ๊กเลือกอย่างน้อย 1 รายการ -->
+    <div id="batch-controls" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
+      <div style="display:flex;gap:6px;margin-bottom:8px;">
+        <button class="copy-btn" id="btn-select-all-voice">☑️ เลือกทั้งหมด</button>
+        <button class="copy-btn" id="btn-select-none-voice">⬜ ไม่เลือกเลย</button>
+      </div>
+      <div class="row2">
+        <div class="fg">
+          <label>หน่วงเวลาระหว่างรอบ</label>
+          <select id="batch-delay">
+            <option value="25000">25 วิ (~2.4 req/min — เผื่อ RPM ต่ำสุด 3)</option>
+            <option value="30000" selected>30 วิ (~2 req/min — ปลอดภัย แนะนำ)</option>
+            <option value="45000">45 วิ (~1.3 req/min — ปลอดภัยสุด)</option>
+          </select>
+        </div>
+        <div class="fg">
+          <label>&nbsp;</label>
+          <button class="btn btn-blue" id="btn-start-batch" style="margin:0;">
+            🚀 เริ่ม Batch (<span id="batch-selected-count">0</span> รายการ)
+          </button>
+        </div>
+      </div>
+      <div id="batch-rpd-warning" class="row-warn" style="display:none;margin-top:8px;"></div>
+    </div>
+
+    <!-- Batch Progress -->
+    <div id="batch-progress" style="display:none;margin-top:10px;">
+      <div class="row-info" style="margin-bottom:8px;">
+        <span>⏳</span>
+        <span id="batch-progress-text">กำลังทำ 1/5: ...</span>
+      </div>
+      <div style="background:var(--bg3);border-radius:6px;height:6px;overflow:hidden;margin-bottom:8px;">
+        <div id="batch-progress-bar" style="background:var(--pn);height:100%;width:0%;transition:width .3s;"></div>
+      </div>
+      <div id="batch-item-log" style="display:flex;flex-direction:column;gap:4px;max-height:160px;overflow-y:auto;font-size:11px;"></div>
+      <button class="btn btn-ghost btn-sm" id="btn-stop-batch" style="margin-top:8px;">⏹️ หยุด Batch</button>
+    </div>
+
+    <div id="batch-summary" style="display:none;margin-top:10px;"></div>
+  </div>
+
+  <hr>
+
+  <div class="card" id="active-voice-label" style="display:none;">
+    <div class="row-info">
+      <span>🎯</span>
+      <span>กำลังใช้: <strong id="active-voice-name">—</strong>
+        <button class="copy-btn" id="btn-use-session" style="margin-left:6px;">ใช้ Content Tab แทน</button>
+      </span>
+    </div>
+  </div>
+
+  <div class="empty" id="voice-empty">
+    <div class="empty-icon">🎙️</div>
+    <div class="empty-text">สร้าง Content จาก Tab สินค้า<br>หรือกด "โหลดรายการ" ด้านบนเพื่อเลือกจาก Sheets</div>
+  </div>
+
+  <div id="voice-output" style="display:none;flex-direction:column;gap:10px;">
+
+    <div class="card">
+      <div class="s-label">🎤 บทพากย์ที่จะใช้สร้างเสียง</div>
+      <div id="voice-script-preview" style="background:var(--bg3);border:1px solid var(--border);
+        border-radius:6px;padding:10px;font-size:13px;line-height:1.6;color:var(--text);
+        white-space:pre-wrap;min-height:60px;max-height:150px;overflow-y:auto;">—</div>
+      <div class="char-count" id="voice-chars-2">0 / 10,000 chars</div>
+      <div class="row-info" style="margin-top:6px;">
+        <span>✏️</span>
+        <span>แก้ไขบทพากย์ได้ที่ Tab "🎬 Content" — ที่นี่แสดงตามล่าสุดอัตโนมัติ</span>
+      </div>
+    </div>
+
+    <hr>
+
+    <!-- Auto TTS via Gemini API — Gen + Upload Drive ในคลิกเดียว -->
+    <div class="card">
+      <div class="card-title">🎙️ Generate เสียงอัตโนมัติ (Gemini TTS)</div>
+
+      <div class="fg">
+        <label>Model TTS</label>
+        <select id="tts-model">
+          <option value="gemini-3.1-flash-tts-preview">Gemini 3.1 Flash TTS (ใหม่กว่า)</option>
+          <option value="gemini-2.5-flash-preview-tts">Gemini 2.5 Flash TTS (โควต้าแยก — สำรอง)</option>
+        </select>
+        <div style="font-size:10px;color:var(--text3);margin-top:3px;">
+          💡 แต่ละ Model มีโควต้ารายวันแยกกัน — ถ้าตัวหนึ่งเต็ม สลับมาอีกตัวได้เลย
+        </div>
+      </div>
+
+      <div class="fg" style="margin-top:8px;">
+        <label>เลือกเสียง</label>
+        <select id="tts-voice">
+          <option value="Kore">Kore — หนักแน่น มั่นใจ</option>
+          <option value="Puck" selected>Puck — สดใส กระตือรือร้น</option>
+          <option value="Zephyr">Zephyr — สดใส</option>
+          <option value="Charon">Charon — ให้ข้อมูล ชัดเจน</option>
+          <option value="Fenrir">Fenrir — ตื่นเต้น มีพลัง</option>
+          <option value="Leda">Leda — เยาว์วัย สดใส</option>
+          <option value="Orus">Orus — หนักแน่น เด็ดขาด</option>
+          <option value="Aoede">Aoede — เบาสบาย</option>
+          <option value="Callirrhoe">Callirrhoe — สบายๆ</option>
+          <option value="Autonoe">Autonoe — สดใส</option>
+          <option value="Enceladus">Enceladus — เบา นุ่ม</option>
+          <option value="Iapetus">Iapetus — ชัดเจน</option>
+          <option value="Umbriel">Umbriel — สบายๆ</option>
+          <option value="Algieba">Algieba — นุ่มนวล</option>
+          <option value="Despina">Despina — นุ่มนวล สงบ</option>
+          <option value="Erinome">Erinome — ชัดเจน แม่นยำ</option>
+          <option value="Algenib">Algenib — เสียงแหบ</option>
+          <option value="Rasalgethi">Rasalgethi — มืออาชีพ</option>
+          <option value="Laomedeia">Laomedeia — สดใส มีชีวิตชีวา</option>
+          <option value="Achernar">Achernar — นุ่ม อ่อนโยน</option>
+          <option value="Alnilam">Alnilam — หนักแน่น</option>
+          <option value="Schedar">Schedar — สม่ำเสมอ</option>
+          <option value="Gacrux">Gacrux — ผู้ใหญ่ มีประสบการณ์</option>
+          <option value="Pulcherrima">Pulcherrima — เชิญชวน</option>
+          <option value="Achird">Achird — เป็นมิตร</option>
+          <option value="Zubenelgenubi">Zubenelgenubi — เป็นกันเอง</option>
+          <option value="Vindemiatrix">Vindemiatrix — อ่อนโยน</option>
+          <option value="Sadachbia">Sadachbia — มีชีวิตชีวา</option>
+          <option value="Sadaltager">Sadaltager — น่าเชื่อถือ</option>
+          <option value="Sulafat">Sulafat — อบอุ่น</option>
+        </select>
+      </div>
+
+      <button class="btn btn-blue" id="btn-generate-voice" style="margin-top:8px;">
+        🎙️ Generate + Upload ขึ้น Drive
+      </button>
+
+      <div id="tts-status" style="display:none;margin-top:8px;"></div>
+      <audio id="tts-preview" controls style="width:100%;height:34px;margin-top:6px;display:none;"></audio>
+
+      <div class="row-info" style="margin-top:8px;">
+        <span>💡</span>
+        <span>ต้องกด "บันทึกลง Sheets + Drive" ในสินค้านี้ก่อน 1 ครั้ง ระบบจะสร้างเสียง + Upload เข้าโฟลเดอร์เดียวกัน + Update สถานะให้อัตโนมัติ</span>
+      </div>
+    </div>
+
+    <hr>
+
+    <!-- Manual fallback: เปิด AI Studio เอง -->
+    <div class="card">
+      <div class="card-title">🔊 หรือสร้างเองผ่าน AI Studio</div>
+
+      <button class="btn btn-google-tts" id="btn-google-tts">
+        🎙️ เปิด Google AI Studio TTS + Copy บทพากย์
+      </button>
+
+      <button class="btn btn-ghost" id="btn-browser-tts" style="margin-top:6px;">
+        🔊 ฟัง Browser TTS (ทดสอบ)
+      </button>
+
+      <div class="row-info" style="margin-top:8px;">
+        <span>💡</span>
+        <span>1. กดปุ่มด้านบน → บทพากย์ถูก Copy อัตโนมัติ<br>
+        2. วางใน AI Studio → เลือกเสียง → Generate<br>
+        3. Download MP3 → Upload ขึ้น Drive โฟลเดอร์สินค้า</span>
+      </div>
+    </div>
+
+  </div><!-- /voice-output -->
+
+</div><!-- /tab-voice -->
 </div><!-- /scroll -->
 
 <div id="toast"></div>

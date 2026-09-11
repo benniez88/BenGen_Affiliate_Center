@@ -44,6 +44,11 @@ textarea{resize:vertical;min-height:48px;}
 .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;}
 .mt6{margin-top:6px;}
 .fg{display:flex;flex-direction:column;gap:3px;}
+.fx-toggle{display:flex;align-items:flex-start;gap:9px;padding:8px 0;border-bottom:1px solid var(--border);}
+.fx-toggle:last-child{border-bottom:none;}
+.fx-toggle input[type=checkbox]{width:16px;height:16px;margin-top:2px;flex-shrink:0;accent-color:var(--pn);}
+.fx-toggle label{font-size:12px;font-weight:700;color:var(--text);cursor:pointer;}
+.fx-desc{font-size:10px;color:var(--text3);line-height:1.4;margin-top:2px;}
 
 /* STATUS */
 .status{font-size:10px;color:var(--text3);margin-top:3px;}
@@ -201,11 +206,11 @@ canvas{width:100%;max-width:270px;display:block;margin:0 auto;
   <div class="card">
     <div class="card-title">⚙️ ตั้งค่าวิดีโอ</div>
     <div class="row3">
-      <div class="fg"><label>วิ/สินค้า (Manual)</label>
-        <select id="frame-dur">
-          <option value="2">2 วิ</option>
-          <option value="3" selected>3 วิ</option>
-          <option value="4">4 วิ</option>
+      <div class="fg"><label>โหมดความยาว</label>
+        <select id="duration-mode">
+          <option value="manual">ตั้งวิ/ภาพเอง</option>
+          <option value="auto-voice" selected>ตามความยาวเสียง</option>
+          <option value="total">กำหนดความยาวรวม</option>
         </select>
       </div>
       <div class="fg"><label>Transition</label>
@@ -226,27 +231,100 @@ canvas{width:100%;max-width:270px;display:block;margin:0 auto;
 
     <hr style="margin:10px 0;">
 
-    <div class="fg" style="flex-direction:row;align-items:center;gap:8px;">
-      <input type="checkbox" id="auto-dur-toggle" checked style="width:auto;">
-      <label style="margin:0;flex:1;">🎙️ คำนวณความยาวจากไฟล์เสียงอัตโนมัติ</label>
+    <!-- โหมด 1: Manual -->
+    <div class="fg" id="mode-manual-fields" style="display:none;">
+      <label>วิ/ภาพ</label>
+      <select id="frame-dur">
+        <option value="2">2 วิ</option>
+        <option value="3" selected>3 วิ</option>
+        <option value="4">4 วิ</option>
+      </select>
     </div>
-    <div class="row2 mt6">
-      <div class="fg"><label>เสียงพากย์ยาว</label>
-        <div id="voice-dur-display" style="padding:6px 10px;background:var(--bg3);
-          border:1px solid var(--border);border-radius:6px;font-size:12px;color:var(--text2);">
-          ยังไม่ได้โหลดเสียง
+
+    <!-- โหมด 2: Auto จากเสียง -->
+    <div id="mode-auto-fields" style="display:none;">
+      <div class="row2">
+        <div class="fg"><label>เสียงพากย์ยาว</label>
+          <div id="voice-dur-display" style="padding:6px 10px;background:var(--bg3);
+            border:1px solid var(--border);border-radius:6px;font-size:12px;color:var(--text2);">
+            ยังไม่ได้โหลดเสียง
+          </div>
+        </div>
+        <div class="fg"><label>+ Padding (วิ)</label>
+          <select id="voice-padding">
+            <option value="2">2 วิ</option>
+            <option value="3">3 วิ</option>
+            <option value="4" selected>4 วิ</option>
+            <option value="5">5 วิ</option>
+          </select>
         </div>
       </div>
-      <div class="fg"><label>+ Padding (วิ)</label>
-        <select id="voice-padding">
-          <option value="2">2 วิ</option>
-          <option value="3">3 วิ</option>
-          <option value="4" selected>4 วิ</option>
-          <option value="5">5 วิ</option>
-        </select>
+    </div>
+
+    <!-- โหมด 3: กำหนดความยาวรวมเอง -->
+    <div id="mode-total-fields" style="display:none;">
+      <label>ความยาวรวมทั้งคลิป (วิ)</label>
+      <input type="number" id="total-duration-input" value="30" min="10" max="30" step="1">
+      <div style="font-size:10px;color:var(--text3);margin-top:3px;">
+        💡 ระบบจะหารเวลาที่เหลือ (หัก Intro/Hook/Outro) เฉลี่ยให้แต่ละภาพเท่าๆ กัน · Shopee Video กำหนด 3-30 วิ
       </div>
     </div>
+
     <div id="auto-dur-info" class="info-row" style="display:none;margin-top:8px;"></div>
+  </div>
+
+  <!-- Effects -->
+  <div class="card">
+    <div class="card-title">✨ Effects (เปิด/ปิดได้อิสระ)</div>
+
+    <div class="fx-toggle">
+      <input type="checkbox" id="fx-kenburns" checked>
+      <div><label>🔍 Ken Burns Effect</label>
+        <div class="fx-desc">รูปนิ่ง Zoom/Pan เบาๆ ให้ดูมีชีวิตชีวาขึ้น ไม่ต้องมีคลิปวิดีโอสินค้าจริงก็ดูโปรได้</div>
+      </div>
+    </div>
+
+    <div class="fx-toggle">
+      <input type="checkbox" id="fx-ducking" checked>
+      <div><label>🔊 Audio Ducking</label>
+        <div class="fx-desc">BGM เบาลงอัตโนมัติตอนมีเสียงพากย์ ดังเต็มตอน Intro/Outro ฟังเสียงพากย์ชัดขึ้น</div>
+      </div>
+    </div>
+
+    <div class="fx-toggle">
+      <input type="checkbox" id="fx-vignette" checked>
+      <div><label>🌑 Vignette</label>
+        <div class="fx-desc">ขอบมืดรอบภาพเบาๆ ให้ดูเป็นซีนีมาติกขึ้น ไม่รบกวนสายตา</div>
+      </div>
+    </div>
+
+    <div class="fx-toggle">
+      <input type="checkbox" id="fx-pricebounce" checked>
+      <div><label>💰 Price Bounce</label>
+        <div class="fx-desc">ราคากระเด้งเข้ามาแบบ Spring แทนโผล่มาเฉยๆ ดึงสายตาตอนโชว์ราคา</div>
+      </div>
+    </div>
+
+    <div class="fx-toggle">
+      <input type="checkbox" id="fx-ctasticker" checked>
+      <div><label>🛒 CTA Sticker ท้ายคลิป</label>
+        <div class="fx-desc">ไอคอนตะกร้ากระเด้งๆ โผล่ที่ Outro ย้ำเตือนให้กดสั่งซื้อ</div>
+      </div>
+    </div>
+
+    <div class="fx-toggle">
+      <input type="checkbox" id="fx-loudnorm" checked>
+      <div><label>📢 Loudness Normalize</label>
+        <div class="fx-desc">ปรับความดังเสียงพากย์ให้เท่ากันทุกคลิป (เสียง 30 แบบดังไม่เท่ากัน)</div>
+      </div>
+    </div>
+
+    <div class="fx-toggle">
+      <input type="checkbox" id="fx-soundfx">
+      <div><label>🔔 Sound FX เสริม</label>
+        <div class="fx-desc">เสียง "ติ๊ง" ตอนราคาโผล่ (สังเคราะห์เองในเบราว์เซอร์ ไม่ต้องมีไฟล์เสียงเพิ่ม)</div>
+      </div>
+    </div>
   </div>
 
   <!-- Drive Upload -->
@@ -288,6 +366,41 @@ canvas{width:100%;max-width:270px;display:block;margin:0 auto;
         </button>
       </div>
     </div>
+
+    <!-- Batch Controls -->
+    <div id="batch-controls" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
+      <div style="display:flex;gap:6px;margin-bottom:8px;">
+        <button class="btn btn-ghost btn-sm" id="btn-select-all-products" style="width:auto;padding:5px 10px;font-size:11px;">☑️ เลือกทั้งหมด</button>
+        <button class="btn btn-ghost btn-sm" id="btn-select-none-products" style="width:auto;padding:5px 10px;font-size:11px;">⬜ ไม่เลือกเลย</button>
+      </div>
+      <div class="fg">
+        <label>BGM สำหรับทั้ง Batch</label>
+        <select id="batch-bgm-mode">
+          <option value="none">ไม่ใช้ BGM</option>
+          <option value="same">เพลงเดียวกันทุกคลิป (ใช้ที่เลือกไว้ใน BGM Card)</option>
+          <option value="random">สุ่มเพลงจากโฟลเดอร์ (ไม่ซ้ำถ้าเพลงพอ)</option>
+        </select>
+      </div>
+      <button class="btn btn-blue" id="btn-start-template-batch" style="margin-top:8px;">
+        🚀 เริ่ม Batch Export (<span id="batch-selected-count">0</span> รายการ)
+      </button>
+      <div id="batch-rpd-warning" class="warn-row" style="display:none;margin-top:8px;"></div>
+    </div>
+
+    <!-- Batch Progress -->
+    <div id="batch-progress" style="display:none;margin-top:10px;">
+      <div class="info-row" style="margin-bottom:8px;">
+        <span>⏳</span>
+        <span id="batch-progress-text">กำลังทำ 1/5: ...</span>
+      </div>
+      <div style="background:var(--bg3);border-radius:6px;height:6px;overflow:hidden;margin-bottom:8px;">
+        <div id="batch-progress-bar" style="background:var(--pn);height:100%;width:0%;transition:width .3s;"></div>
+      </div>
+      <div id="batch-item-log" style="display:flex;flex-direction:column;gap:4px;max-height:200px;overflow-y:auto;font-size:11px;"></div>
+      <button class="btn btn-ghost btn-sm" id="btn-stop-template-batch" style="margin-top:8px;">⏹️ หยุด Batch</button>
+    </div>
+
+    <div id="batch-summary" style="display:none;margin-top:10px;"></div>
   </div>
 
 </div><!-- /left -->
@@ -426,6 +539,9 @@ document.getElementById('btn-load-images').addEventListener('click', loadImagesF
 document.getElementById('btn-load-voice').addEventListener('click', loadVoiceFromDrive);
 
 let selectedProduct = null;
+let templateBatchRows = [];      // Products ที่โหลดมาล่าสุด ใช้กับ Batch
+let templateBatchRunning = false;
+let templateBatchStopRequested = false;
 
 async function loadProducts() {
   const appsUrl = document.getElementById('apps-script-url').value.trim();
@@ -455,25 +571,37 @@ async function loadProducts() {
     listEl.innerHTML = rows.map((r, i) => `
       <div class="product-pick-item" data-idx="${i}" style="
         padding:10px;background:var(--bg3);border-radius:8px;
-        border:1px solid var(--border);cursor:pointer;transition:border-color .15s;">
-        <div style="font-size:12px;font-weight:700;margin-bottom:3px;">${r.productName || r.id}</div>
-        <div style="font-size:10px;color:var(--text2);">
-          ${r.voiceStatus === 'done' ? '✅ เสียงพร้อม' : '⏳ รอเสียง'} ·
-          ${r.charCount ? r.charCount + ' chars' : ''} ·
-          ${r.createdAt ? new Date(r.createdAt).toLocaleDateString('th-TH') : ''}
+        border:1px solid var(--border);display:flex;align-items:flex-start;gap:8px;">
+        <input type="checkbox" class="batch-product-check" data-idx="${i}" style="margin-top:2px;flex-shrink:0;width:16px;height:16px;">
+        <div style="flex:1;cursor:pointer;" data-select-idx="${i}">
+          <div style="font-size:12px;font-weight:700;margin-bottom:3px;">${r.productName || r.id}</div>
+          <div style="font-size:10px;color:var(--text2);">
+            ${r.voiceStatus === 'done' ? '✅ เสียงพร้อม' : '⏳ รอเสียง'} ·
+            ${r.charCount ? r.charCount + ' chars' : ''} ·
+            ${r.createdAt ? new Date(r.createdAt).toLocaleDateString('th-TH') : ''}
+          </div>
         </div>
       </div>
     `).join('');
 
     // เก็บ rows ไว้ใน dataset
     listEl.dataset.rows = JSON.stringify(rows);
+    templateBatchRows = rows;
 
-    // Click to select
-    listEl.querySelectorAll('.product-pick-item').forEach((el, i) => {
-      el.addEventListener('click', () => selectProduct(rows[i], el, listEl));
+    // Click ที่ข้อความ → เลือกแบบเดี่ยว (behavior เดิม)
+    listEl.querySelectorAll('[data-select-idx]').forEach(el => {
+      const i = parseInt(el.dataset.selectIdx);
+      el.addEventListener('click', () => selectProduct(rows[i], el.closest('.product-pick-item'), listEl));
+    });
+
+    // ติ๊ก Checkbox → เข้าโหมด Batch selection
+    listEl.querySelectorAll('.batch-product-check').forEach(cb => {
+      cb.addEventListener('change', updateTemplateBatchCount);
     });
 
     setLoadStatus('ok', `✅ พบ ${rows.length} สินค้าที่รอสร้างวิดีโอ — กดเลือกได้เลยครับ`);
+    document.getElementById('batch-controls').style.display = 'block';
+    updateTemplateBatchCount();
 
   } catch (err) {
     setLoadStatus('err', '❌ ' + err.message);
@@ -506,6 +634,20 @@ function selectProduct(row, el, listEl) {
 
   redraw();
   toast('✅ เลือก "' + (row.productName || row.id) + '" แล้ว');
+}
+
+// เหมือน selectProduct แต่ไม่แตะ DOM ของ List (ใช้ตอน Batch ไม่ต้อง Highlight)
+function selectProductForBatch(row) {
+  selectedProduct = row;
+  document.getElementById('hook-text').value   = row.hook || row.productName || '';
+  document.getElementById('cta-text').value    = '🔗 กดตะกร้าส้มได้เลยครับ';
+  document.getElementById('product-id').value  = row.productId || row.id || '';
+
+  const infoEl = document.getElementById('selected-info');
+  infoEl.style.display = 'block';
+  document.getElementById('selected-name').textContent = row.productName || row.id;
+  document.getElementById('selected-meta').textContent =
+    `ID: ${row.productId || ''} · voiceStatus: ${row.voiceStatus || 'pending'} · videoStatus: ${row.videoStatus || 'pending'}`;
 }
 
 async function loadImagesFromDrive() {
@@ -561,8 +703,6 @@ async function loadImagesFromDrive() {
 
     // โหลดรูปเป็น HTMLImageElement จาก Base64 ที่ Apps Script ส่งมา
     imgs = [];
-    const thumbs = document.getElementById('thumbs');
-    thumbs.innerHTML = '';
 
     for (let i = 0; i < imgList.length; i++) {
       const item   = imgList[i];
@@ -576,23 +716,12 @@ async function loadImagesFromDrive() {
         img.src = b64Src;
       });
 
-      if (img.naturalWidth > 0) {
-        imgs.push(img);
-        const t = document.createElement('img');
-        t.src = b64Src;
-        t.style.cssText = 'width:38px;height:38px;object-fit:cover;border-radius:4px;border:1px solid var(--border);cursor:pointer;';
-        t.addEventListener('click', () => {
-          document.querySelectorAll('.thumbs img').forEach(x => x.style.border = '1px solid var(--border)');
-          t.style.border = '1px solid var(--pn)';
-        });
-        thumbs.appendChild(t);
-      }
+      if (img.naturalWidth > 0) imgs.push(img);
       setLoadStatus('info', `โหลดรูป ${i+1}/${imgList.length}...`);
     }
 
-    document.getElementById('img-status').textContent = `✅ ${imgs.length} ภาพจาก Drive`;
-    document.getElementById('img-status').className   = 'status ok';
-    setLoadStatus('ok', `✅ โหลดรูป ${imgs.length} ภาพจาก Drive แล้ว`);
+    renderImageManager();
+    setLoadStatus('ok', `✅ โหลดรูป ${imgs.length} ภาพจาก Drive แล้ว — เลื่อนลำดับหรือตัดออกได้ที่ Gallery`);
     buildTimeline(); redraw();
     toast(`✅ โหลดรูป ${imgs.length} ภาพจาก Drive`);
 
@@ -742,8 +871,6 @@ function autoLoad() {
 
 function loadImgsFromBase64(srcs) {
   imgs = [];
-  const thumbs = document.getElementById('thumbs');
-  thumbs.innerHTML = '';
   const status = document.getElementById('img-status');
 
   const promises = srcs.map((src, i) => new Promise(res => {
@@ -757,20 +884,98 @@ function loadImgsFromBase64(srcs) {
     imgs = imgs.filter(Boolean);
     status.textContent = `✅ ${imgs.length} ภาพ`;
     status.className = 'status ok';
-    imgs.forEach((img, i) => {
-      const t = document.createElement('img');
-      t.src = img.src;
-      t.className = i === 0 ? 'active' : '';
-      t.addEventListener('click', () => {
-        document.querySelectorAll('.thumbs img').forEach(x => x.classList.remove('active'));
-        t.classList.add('active');
-        previewScene('prod' + i);
-      });
-      thumbs.appendChild(t);
-    });
+    renderImageManager();
     buildTimeline();
     redraw();
   });
+}
+
+// ═══════════════════════════════════════
+// IMAGE MANAGER — เลื่อนลำดับ (▲▼) + ตัดออก (✕)
+// ลำดับใน imgs[] = ลำดับที่ปรากฏในวิดีโอ
+// ═══════════════════════════════════════
+function renderImageManager() {
+  const thumbs = document.getElementById('thumbs');
+  thumbs.innerHTML = '';
+
+  imgs.forEach((img, i) => {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:relative;display:inline-block;margin:2px;';
+
+    const t = document.createElement('img');
+    t.src = img.src;
+    t.className = i === 0 ? 'active' : '';
+    t.title = `รูปที่ ${i+1} — คลิกเพื่อดู Preview`;
+    t.addEventListener('click', () => {
+      document.querySelectorAll('.thumbs img').forEach(x => x.classList.remove('active'));
+      t.classList.add('active');
+      previewScene('prod' + i);
+    });
+
+    // เลขลำดับมุมซ้ายบน
+    const badge = document.createElement('div');
+    badge.textContent = i + 1;
+    badge.style.cssText = 'position:absolute;top:1px;left:1px;background:var(--pn);color:#000;' +
+      'font-size:9px;font-weight:800;width:14px;height:14px;border-radius:3px;' +
+      'display:flex;align-items:center;justify-content:center;pointer-events:none;';
+
+    // ปุ่ม ✕ ตัดออก มุมขวาบน
+    const btnRemove = document.createElement('button');
+    btnRemove.textContent = '✕';
+    btnRemove.title = 'ตัดรูปนี้ออกจากวิดีโอ';
+    btnRemove.style.cssText = 'position:absolute;top:-4px;right:-4px;width:16px;height:16px;' +
+      'border-radius:50%;background:var(--red);color:#fff;border:none;font-size:10px;' +
+      'line-height:1;cursor:pointer;padding:0;';
+    btnRemove.addEventListener('click', e => { e.stopPropagation(); removeImage(i); });
+
+    // ปุ่ม ▲ เลื่อนขึ้น (ซ้ายล่าง)
+    const btnUp = document.createElement('button');
+    btnUp.textContent = '▲';
+    btnUp.title = 'เลื่อนขึ้น (แสดงก่อน)';
+    btnUp.disabled = i === 0;
+    btnUp.style.cssText = 'position:absolute;bottom:-4px;left:1px;width:16px;height:14px;' +
+      'border-radius:3px;background:var(--bg4);color:#fff;border:1px solid var(--border);' +
+      'font-size:8px;line-height:1;cursor:pointer;padding:0;' + (i===0?'opacity:.3;':'');
+    btnUp.addEventListener('click', e => { e.stopPropagation(); moveImage(i, -1); });
+
+    // ปุ่ม ▼ เลื่อนลง (ขวาล่าง)
+    const btnDown = document.createElement('button');
+    btnDown.textContent = '▼';
+    btnDown.title = 'เลื่อนลง (แสดงทีหลัง)';
+    btnDown.disabled = i === imgs.length - 1;
+    btnDown.style.cssText = 'position:absolute;bottom:-4px;right:1px;width:16px;height:14px;' +
+      'border-radius:3px;background:var(--bg4);color:#fff;border:1px solid var(--border);' +
+      'font-size:8px;line-height:1;cursor:pointer;padding:0;' + (i===imgs.length-1?'opacity:.3;':'');
+    btnDown.addEventListener('click', e => { e.stopPropagation(); moveImage(i, 1); });
+
+    wrap.appendChild(t);
+    wrap.appendChild(badge);
+    wrap.appendChild(btnRemove);
+    wrap.appendChild(btnUp);
+    wrap.appendChild(btnDown);
+    thumbs.appendChild(wrap);
+  });
+
+  const cntEl = document.getElementById('img-status');
+  if (cntEl) { cntEl.textContent = `✅ ${imgs.length} ภาพ`; cntEl.className = 'status ok'; }
+}
+
+function moveImage(index, dir) {
+  const newIndex = index + dir;
+  if (newIndex < 0 || newIndex >= imgs.length) return;
+  [imgs[index], imgs[newIndex]] = [imgs[newIndex], imgs[index]];
+  renderImageManager();
+  buildTimeline();
+  redraw();
+}
+
+function removeImage(index) {
+  if (imgs.length <= 1) { toast('⚠️ ต้องมีอย่างน้อย 1 ภาพครับ'); return; }
+  imgs.splice(index, 1);
+  renderImageManager();
+  buildTimeline();
+  redraw();
+  toast('🗑️ ตัดรูปออกแล้ว — เหลือ ' + imgs.length + ' ภาพ');
 }
 
 // ═══════════════════════════════════════
@@ -882,14 +1087,8 @@ async function onBgmPresetSelect() {
   const fileId = this.value;
   if (!fileId) { bgmFile = null; document.getElementById('bgm-status').textContent = 'ยังไม่ได้เลือก'; document.getElementById('bgm-status').className='status'; return; }
 
-  const appsUrl = document.getElementById('apps-script-url').value.trim();
-  if (!appsUrl) { toast('⚠️ ใส่ Apps Script URL ก่อนครับ'); return; }
-
   const picked = bgmFilesList.find(f => f.id === fileId);
-
-  // เช็คขนาดก่อน — ถ้าใหญ่เกินไปแจ้งทันทีไม่ต้องรอโหลด
   if (picked?.tooLarge) {
-    bgmFile = null;
     document.getElementById('bgm-status').textContent =
       `❌ "${picked.name}" ใหญ่เกินไป (${picked.sizeMB} MB) — เลือกไฟล์ที่เล็กกว่า 15MB หรือตัดคลิปให้สั้นลงครับ`;
     document.getElementById('bgm-status').className = 'status err';
@@ -900,6 +1099,24 @@ async function onBgmPresetSelect() {
 
   document.getElementById('bgm-status').innerHTML = '<span class="spin"></span> กำลังโหลด "' + (picked?.name||'') + '"...';
 
+  const result = await loadBgmByFileId(fileId);
+
+  if (result.success) {
+    document.getElementById('bgm-status').textContent = '✅ ' + (picked?.name || result.name || 'BGM') + ' (จาก Drive)';
+    document.getElementById('bgm-status').className   = 'status ok';
+    toast('✅ โหลดเพลง "' + (picked?.name||'') + '" แล้ว');
+  } else {
+    document.getElementById('bgm-status').textContent = '❌ ' + result.error;
+    document.getElementById('bgm-status').className   = 'status err';
+    toast('❌ โหลดเพลงไม่สำเร็จ: ' + result.error);
+  }
+}
+
+// Core logic โหลด BGM จาก fileId — คืนค่า {success, error, name} ใช้ได้ทั้ง Manual และ Batch
+async function loadBgmByFileId(fileId) {
+  const appsUrl = document.getElementById('apps-script-url').value.trim();
+  if (!appsUrl) return { success: false, error: 'ยังไม่ได้ใส่ Apps Script URL' };
+
   try {
     const resp = await xhrGet(`${appsUrl}?action=proxyAudio&fileId=${fileId}`);
     if (resp.error) throw new Error(resp.error);
@@ -908,15 +1125,11 @@ async function onBgmPresetSelect() {
     const blob = base64ToBlob(resp.base64);
     bgmFile = blob; // Blob ใช้แทน File ได้ (มี arrayBuffer() เหมือนกัน)
 
-    document.getElementById('bgm-status').textContent = '✅ ' + (picked?.name || resp.name || 'BGM') + ' (จาก Drive)';
-    document.getElementById('bgm-status').className   = 'status ok';
-    toast('✅ โหลดเพลง "' + (picked?.name||'') + '" แล้ว');
+    return { success: true, name: resp.name };
 
   } catch (err) {
     bgmFile = null;
-    document.getElementById('bgm-status').textContent = '❌ ' + err.message;
-    document.getElementById('bgm-status').className   = 'status err';
-    toast('❌ โหลดเพลงไม่สำเร็จ: ' + err.message);
+    return { success: false, error: err.message };
   }
 }
 
@@ -925,8 +1138,17 @@ async function onBgmPresetSelect() {
   document.getElementById(id).addEventListener('input', redraw);
 });
 document.getElementById('frame-dur').addEventListener('change', () => { buildTimeline(); redraw(); });
-document.getElementById('auto-dur-toggle').addEventListener('change', () => { buildTimeline(); redraw(); });
+document.getElementById('duration-mode').addEventListener('change', () => { updateDurationModeUI(); buildTimeline(); redraw(); });
 document.getElementById('voice-padding').addEventListener('change', () => { buildTimeline(); redraw(); });
+document.getElementById('total-duration-input').addEventListener('input', () => { buildTimeline(); redraw(); });
+
+function updateDurationModeUI() {
+  const mode = document.getElementById('duration-mode').value;
+  document.getElementById('mode-manual-fields').style.display = mode === 'manual'     ? 'flex' : 'none';
+  document.getElementById('mode-auto-fields').style.display   = mode === 'auto-voice' ? 'block' : 'none';
+  document.getElementById('mode-total-fields').style.display  = mode === 'total'      ? 'block' : 'none';
+}
+updateDurationModeUI(); // เรียกครั้งแรกตอนโหลดหน้า
 document.getElementById('btn-preview').addEventListener('click', redraw);
 document.getElementById('btn-export').addEventListener('click', exportVideo);
 document.getElementById('btn-upload-drive').addEventListener('click', uploadToDrive);
@@ -944,26 +1166,37 @@ function getScenes() {
   const logoDur   = logoVid ? Math.min(Math.floor(logoVid.duration), 4) : 3;
   const hookDur   = 3;
   const numImgs   = Math.max(imgs.length, 1);
-  const autoOn    = document.getElementById('auto-dur-toggle')?.checked;
+  const mode      = document.getElementById('duration-mode')?.value || 'auto-voice';
   const manualDur = parseInt(document.getElementById('frame-dur').value) || 3;
 
   let perImgDur = manualDur;
+  const infoEl = document.getElementById('auto-dur-info');
 
-  if (autoOn && voiceDurationSec > 0) {
-    const padding  = parseInt(document.getElementById('voice-padding').value) || 4;
+  if (mode === 'auto-voice' && voiceDurationSec > 0) {
+    const padding = parseInt(document.getElementById('voice-padding').value) || 4;
     const targetContentDur = voiceDurationSec + padding; // Hook + Products ต้องครอบคลุมความยาวนี้
     const productsTotal    = Math.max(targetContentDur - hookDur, numImgs * 1.5);
     perImgDur = Math.max(1.5, Math.round((productsTotal / numImgs) * 10) / 10);
 
-    // แสดงข้อมูลให้ user เห็น
-    const infoEl = document.getElementById('auto-dur-info');
     if (infoEl) {
       infoEl.style.display = 'flex';
       const totalEst = logoDur + hookDur + perImgDur*numImgs + logoDur;
       infoEl.innerHTML = `<span>🎯</span><span>เสียง ${voiceDurationSec.toFixed(1)}วิ + padding ${padding}วิ → ${perImgDur.toFixed(1)}วิ/ภาพ × ${numImgs} ภาพ (รวมประมาณ ${totalEst.toFixed(1)}วิ)</span>`;
     }
+
+  } else if (mode === 'total') {
+    const totalTarget = parseFloat(document.getElementById('total-duration-input')?.value) || 30;
+    const productsTotal = Math.max(totalTarget - logoDur*2 - hookDur, numImgs * 1.0);
+    perImgDur = Math.max(1.0, Math.round((productsTotal / numImgs) * 10) / 10);
+
+    if (infoEl) {
+      infoEl.style.display = 'flex';
+      const totalEst = logoDur + hookDur + perImgDur*numImgs + logoDur;
+      infoEl.innerHTML = `<span>🎯</span><span>ตั้งรวม ${totalTarget}วิ → หัก Intro/Hook/Outro (${logoDur*2+hookDur}วิ) เหลือ ${productsTotal.toFixed(1)}วิ ÷ ${numImgs} ภาพ = ${perImgDur.toFixed(1)}วิ/ภาพ (รวมจริง ≈ ${totalEst.toFixed(1)}วิ)</span>`;
+    }
+
   } else {
-    const infoEl = document.getElementById('auto-dur-info');
+    // manual mode
     if (infoEl) infoEl.style.display = 'none';
   }
 
@@ -971,9 +1204,9 @@ function getScenes() {
     { id:'intro',  label:'🎬 Intro',  dur: logoDur, type:'logo' },
     { id:'hook',   label:'✨ Hook',   dur: hookDur, type:'hook' },
   ];
-  imgs.forEach((img, i) => scenes.push({ id:'prod'+i, label:'🛍️ #'+(i+1), dur: perImgDur, type:'product', img }));
-  if (!imgs.length) scenes.push({ id:'prod0', label:'🛍️ สินค้า', dur: perImgDur, type:'product', img: null });
-  scenes.push({ id:'outro', label:'🎬 Outro', dur: logoDur, type:'logo' });
+  imgs.forEach((img, i) => scenes.push({ id:'prod'+i, label:'🛍️ #'+(i+1), dur: perImgDur, type:'product', img, imgIndex: i }));
+  if (!imgs.length) scenes.push({ id:'prod0', label:'🛍️ สินค้า', dur: perImgDur, type:'product', img: null, imgIndex: 0 });
+  scenes.push({ id:'outro', label:'🎬 Outro', dur: logoDur, type:'logo', isOutro: true });
   return scenes;
 }
 
@@ -1091,7 +1324,7 @@ function drawBar() {
 // ═══════════════════════════════════════
 // DRAW — SCENES
 // ═══════════════════════════════════════
-function drawLogo(alpha) {
+function drawLogo(alpha, isOutro) {
   alpha = (alpha === undefined) ? 1 : alpha;
   ctx.globalAlpha = alpha;
 
@@ -1168,6 +1401,30 @@ function drawLogo(alpha) {
     ctx.fillText('✦  Shopee Affiliate Creator  ✦', cx, cy + avR + titleFs*1.6 + subFs*1.5);
   }
 
+  // ── CTA Sticker: ไอคอนตะกร้ากระเด้งๆ โผล่เฉพาะตอน Outro ──
+  if (isOutro && document.getElementById('fx-ctasticker')?.checked) {
+    const t = Date.now() / 1000;
+    const bounce      = Math.abs(Math.sin(t * 3)) * H * 0.02;
+    const stickerSize = Math.floor(W * 0.16);
+    const stickerY    = H * 0.72 - bounce;
+
+    ctx.save();
+    ctx.font = stickerSize + 'px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.shadowColor = 'rgba(255,140,0,0.8)';
+    ctx.shadowBlur  = W * 0.03;
+    ctx.fillText('🛒', W/2, stickerY);
+    ctx.restore();
+
+    const ctaFs2 = Math.floor(W*0.042);
+    ctx.font = '800 ' + ctaFs2 + 'px Sarabun,sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff';
+    ctx.shadowColor = 'rgba(0,0,0,.9)'; ctx.shadowBlur = 10;
+    ctx.fillText('กดตะกร้าส้มเลย! 🔥', W/2, stickerY + stickerSize*0.55);
+    ctx.shadowBlur = 0;
+  }
+
   ctx.globalAlpha = 1;
   drawBar();
 }
@@ -1237,18 +1494,57 @@ function drawHook(alpha) {
   drawBar();
 }
 
-function drawProduct(img, alpha) {
+function drawProduct(img, alpha, opts) {
+  opts = opts || {};
+  const progress  = opts.progress  !== undefined ? opts.progress  : 0; // 0→1 ตลอด scene
+  const sceneDur  = opts.sceneDur  || 3;
+  const imgIndex  = opts.imgIndex  || 0;
+  const elapsedSec = progress * sceneDur;
+
   alpha = (alpha === undefined) ? 1 : alpha;
   ctx.globalAlpha = alpha;
   const origP = document.getElementById('price-orig').value || '';
   const saleP = document.getElementById('price-sale').value || '';
   const cta   = document.getElementById('cta-text').value || '';
 
+  const kenBurnsOn = document.getElementById('fx-kenburns')?.checked;
+  const vignetteOn = document.getElementById('fx-vignette')?.checked;
+  const bounceOn   = document.getElementById('fx-pricebounce')?.checked;
+
   ctx.fillStyle='#e8e8e8'; ctx.fillRect(0,0,W,H-BAR_H);
+
   if(img){
-    const sc=Math.max(W/img.width,(H-BAR_H)*.78/img.height);
-    const dw=img.width*sc, dh=img.height*sc;
-    ctx.drawImage(img,(W-dw)/2,(H-BAR_H)*.11+((H-BAR_H)*.78-dh)/2,dw,dh);
+    // ── Ken Burns: Zoom เบาๆ ตลอด scene สลับทิศทางตามลำดับรูป (คู่/คี่) ──
+    let kbScale = 1, kbOffX = 0, kbOffY = 0;
+    if (kenBurnsOn) {
+      const zoomAmt = 0.10; // Zoom 10% ตลอด scene
+      const isEven  = (imgIndex % 2 === 0);
+      kbScale = 1 + zoomAmt * progress;
+      if (!isEven) {
+        // รูปคี่: Pan เบาๆ ไปทางซ้ายบน ระหว่าง Zoom
+        kbOffX = -W * 0.025 * progress;
+        kbOffY = -H * 0.018 * progress;
+      }
+    }
+
+    const baseSc = Math.max(W/img.width, (H-BAR_H)*.78/img.height) * kbScale;
+    const dw = img.width * baseSc, dh = img.height * baseSc;
+    const dx = (W-dw)/2 + kbOffX;
+    const dy = (H-BAR_H)*.11 + ((H-BAR_H)*.78-dh)/2 + kbOffY;
+
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, W, H-BAR_H); ctx.clip(); // กันรูปล้นขอบตอน Zoom/Pan
+    ctx.drawImage(img, dx, dy, dw, dh);
+    ctx.restore();
+  }
+
+  // ── Vignette: ขอบมืดรอบภาพเบาๆ ──
+  if (vignetteOn) {
+    const vg = ctx.createRadialGradient(W/2, (H-BAR_H)*0.42, (H-BAR_H)*0.25, W/2, (H-BAR_H)*0.42, (H-BAR_H)*0.72);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(0,0,0,0.35)');
+    ctx.fillStyle = vg;
+    ctx.fillRect(0, 0, W, H-BAR_H);
   }
 
   const tg=ctx.createLinearGradient(0,0,0,H*.18);
@@ -1268,6 +1564,22 @@ function drawProduct(img, alpha) {
   const pY       = H - BAR_H - Math.floor(H*0.14);
 
   if(saleP){
+    // ── Price Bounce: Spring scale ในช่วง 0.5 วิแรกของ scene เท่านั้น ──
+    let priceScale = 1;
+    if (bounceOn) {
+      const bounceDur = 0.5; // วินาที
+      if (elapsedSec < bounceDur) {
+        const t = elapsedSec / bounceDur; // 0→1
+        // Overshoot bounce easing: เด้งเกินแล้วเด้งกลับ
+        priceScale = 1 - Math.exp(-6*t) * Math.cos(10*t) * 0.4;
+      }
+    }
+
+    ctx.save();
+    ctx.translate(W/2, pY - pboxH*0.35);
+    ctx.scale(priceScale, priceScale);
+    ctx.translate(-W/2, -(pY - pboxH*0.35));
+
     ctx.fillStyle='rgba(13,10,20,.88)';
     rrect(ctx, W/2-pboxW/2, pY-pboxH*0.7, pboxW, pboxH, pboxH/2); ctx.fill();
     ctx.strokeStyle='rgba(200,125,255,.55)'; ctx.lineWidth=2;
@@ -1286,6 +1598,7 @@ function drawProduct(img, alpha) {
     sg.addColorStop(0,'#ff6ec7'); sg.addColorStop(1,'#c87dff'); ctx.fillStyle=sg;
     ctx.shadowColor='rgba(200,125,255,.8)'; ctx.shadowBlur=20;
     ctx.fillText(saleP, origP ? W/2+priceFsL*0.9 : W/2, pY); ctx.shadowBlur=0;
+    ctx.restore();
   }
   if(cta){
     ctx.font='700 '+ctaFs+'px Sarabun,sans-serif'; ctx.textAlign='center';
@@ -1370,20 +1683,20 @@ function redraw() {
   const scenes = getScenes();
   const sc = scenes.find(s => s.id === curScene) || scenes[0];
   ctx.clearRect(0, 0, W, H);
-  if(sc.type==='logo') drawLogo();
+  if(sc.type==='logo') drawLogo(1, sc.isOutro);
   else if(sc.type==='hook') drawHook();
-  else drawProduct(sc.img || null);
+  else drawProduct(sc.img || null, 1, { progress: 0.5, sceneDur: sc.dur, imgIndex: sc.imgIndex || 0 });
   buildTimeline();
 }
 
 // ═══════════════════════════════════════
 // EXPORT VIDEO — Fade Transition + Audio Fix
 // ═══════════════════════════════════════
-function drawScene(sc, alpha) {
+function drawScene(sc, alpha, progress) {
   ctx.clearRect(0,0,W,H);
-  if (sc.type==='logo')    drawLogo(alpha);
+  if (sc.type==='logo')    drawLogo(alpha, sc.isOutro);
   else if(sc.type==='hook') drawHook(alpha);
-  else                      drawProduct(sc.img||null, alpha);
+  else drawProduct(sc.img||null, alpha, { progress: progress||0, sceneDur: sc.dur, imgIndex: sc.imgIndex||0 });
 }
 
 // ═══════════════════════════════════════
@@ -1458,6 +1771,52 @@ async function remuxForSeekable(blob, ext) {
   return new Blob([data.buffer], { type: 'video/mp4' });
 }
 
+// สังเคราะห์เสียง "ติ๊ง" สั้นๆ ด้วย Oscillator (ไม่ต้องมีไฟล์เสียงเพิ่ม)
+function playSynthTing(audioCtx, dest, atTime) {
+  const osc  = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(1400, atTime);
+  osc.frequency.exponentialRampToValueAtTime(1800, atTime + 0.08);
+
+  gain.gain.setValueAtTime(0, atTime);
+  gain.gain.linearRampToValueAtTime(0.35, atTime + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.001, atTime + 0.35);
+
+  osc.connect(gain); gain.connect(dest);
+  osc.start(atTime);
+  osc.stop(atTime + 0.4);
+}
+
+// ปรับความดังเสียง (Peak Normalize) — หา peak amplitude แล้ว scale ให้ถึง target
+function normalizeAudioBuffer(buffer, targetPeak) {
+  const ctx2 = new AudioContext();
+  const newBuffer = ctx2.createBuffer(buffer.numberOfChannels, buffer.length, buffer.sampleRate);
+
+  let peak = 0;
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    const data = buffer.getChannelData(ch);
+    for (let i = 0; i < data.length; i++) {
+      const abs = Math.abs(data[i]);
+      if (abs > peak) peak = abs;
+    }
+  }
+
+  const gain = peak > 0 ? Math.min(targetPeak / peak, 4) : 1; // จำกัดไม่ให้ Gain สูงเกินไปจนแตก (max 4x)
+
+  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+    const src = buffer.getChannelData(ch);
+    const dst = newBuffer.getChannelData(ch);
+    for (let i = 0; i < src.length; i++) {
+      dst[i] = Math.max(-1, Math.min(1, src[i] * gain)); // clamp กัน clipping
+    }
+  }
+
+  ctx2.close();
+  return newBuffer;
+}
+
 async function exportVideo() {
   if(!imgs.length) { toast('⚠️ เพิ่มรูปสินค้าก่อนครับ'); return; }
 
@@ -1472,6 +1831,20 @@ async function exportVideo() {
   const FADE_F = 10;
   const scenes = getScenes();
   const totalF = scenes.reduce((s,sc) => s + sc.dur*FPS, 0) + (scenes.length-1)*FADE_F;
+
+  const FRAME_MS = 1000 / FPS;
+  const FADE_MS  = FADE_F * FRAME_MS;
+  const totalMs  = scenes.reduce((s,sc) => s + sc.dur*1000, 0) + (scenes.length-1)*FADE_MS;
+
+  // คำนวณเวลาเริ่ม/จบของแต่ละ Scene (วินาที) รวม Fade overhead — ใช้ Schedule Audio Ducking + Sound FX
+  const FADE_SEC = FADE_MS / 1000;
+  let __t = 0;
+  const sceneTimings = scenes.map((sc, i) => {
+    if (i > 0) __t += FADE_SEC;
+    const start = __t;
+    __t += sc.dur;
+    return { start, end: __t, sc };
+  });
 
   // ── Pre-decode audio จาก blob URL (ไม่ fetch จาก file://) ──
   let voiceBuffer = null;
@@ -1494,6 +1867,12 @@ async function exportVideo() {
       const tmp = new AudioContext();
       voiceBuffer = await tmp.decodeAudioData(buf);
       await tmp.close();
+
+      // ── Loudness Normalize: ปรับความดังเสียงพากย์ให้เท่ากันทุกคลิป ──
+      if (document.getElementById('fx-loudnorm')?.checked) {
+        voiceBuffer = normalizeAudioBuffer(voiceBuffer, 0.9);
+      }
+
       document.getElementById('prog-text').textContent = '✅ decode เสียงเสร็จ — กำลัง setup...';
     } catch(e) {
       console.error('Voice decode failed:', e);
@@ -1523,24 +1902,59 @@ async function exportVideo() {
   let audioCtx = null;
   if(voiceBuffer || bgmBuffer) {
     audioCtx = new AudioContext();
-    const dest = audioCtx.createMediaStreamDestination();
+    const dest  = audioCtx.createMediaStreamDestination();
+    const startAt = audioCtx.currentTime + 0.05; // เผื่อเวลาตั้งค่าเล็กน้อยก่อนเริ่มจริง
 
     if(voiceBuffer) {
       const src = audioCtx.createBufferSource();
       const g   = audioCtx.createGain(); g.gain.value = 1.0;
       src.buffer = voiceBuffer;
       src.connect(g); g.connect(dest);
-      // เสียงเริ่มทันที — จะ sync กับ frame แรก
-      src.start(0);
+      src.start(startAt);
     }
+
     if(bgmBuffer) {
-      const bgmVol = parseFloat(document.getElementById('bgm-vol').value) || 0.35;
+      const bgmVol   = parseFloat(document.getElementById('bgm-vol').value) || 0.35;
+      const duckingOn = document.getElementById('fx-ducking')?.checked;
       const src = audioCtx.createBufferSource();
-      const g   = audioCtx.createGain(); g.gain.value = bgmVol;
+      const g   = audioCtx.createGain();
       src.buffer = bgmBuffer; src.loop = true;
       src.connect(g); g.connect(dest);
-      src.start(0);
+
+      if (duckingOn) {
+        // ── Audio Ducking: ดังเต็มตอน Intro/Outro, เบาลงตอนมีเสียงพากย์ ──
+        const duckedVol = bgmVol * 0.4;
+        const rampSec   = 0.3;
+
+        // เริ่มดังเต็มที่ (Intro)
+        g.gain.setValueAtTime(bgmVol, startAt);
+
+        // หา scene แรกที่ไม่ใช่ logo (Hook) และ scene แรกที่เป็น Outro
+        const firstVoiceScene = sceneTimings.find(t => t.sc.type !== 'logo');
+        const outroScene      = sceneTimings.find(t => t.sc.isOutro);
+
+        if (firstVoiceScene) {
+          g.gain.linearRampToValueAtTime(duckedVol, startAt + firstVoiceScene.start + rampSec);
+        }
+        if (outroScene) {
+          g.gain.setValueAtTime(duckedVol, startAt + outroScene.start - rampSec);
+          g.gain.linearRampToValueAtTime(bgmVol, startAt + outroScene.start + rampSec);
+        }
+      } else {
+        g.gain.value = bgmVol;
+      }
+
+      src.start(startAt);
     }
+
+    // ── Sound FX: เสียง "ติ๊ง" สังเคราะห์เอง ตอนราคาโผล่ (ต้นแต่ละ product scene) ──
+    if (document.getElementById('fx-soundfx')?.checked) {
+      sceneTimings.forEach(t => {
+        if (t.sc.type !== 'product') return;
+        playSynthTing(audioCtx, dest, startAt + t.start + 0.05);
+      });
+    }
+
     dest.stream.getAudioTracks().forEach(t => allTracks.push(t));
   }
 
@@ -1568,10 +1982,6 @@ async function exportVideo() {
   // ── Render Loop (TIME-BASED — รับประกันความยาวจริงตรงตาม sc.dur) ──
   // สำคัญ: MediaRecorder จับเวลาจาก wall-clock จริง ไม่ใช่จำนวน frame ที่วาด
   // ดังนั้นต้องรอเวลาจริงให้ครบตามที่ตั้งไว้ ไม่ใช่แค่นับ frame แล้ว sleep สั้นๆ
-  const FRAME_MS   = 1000 / FPS; // เวลาจริงต่อ 1 frame (~33.3ms ที่ 30fps)
-  const FADE_MS    = FADE_F * FRAME_MS;
-  const totalMs    = scenes.reduce((s,sc) => s + sc.dur*1000, 0) + (scenes.length-1)*FADE_MS;
-
   function pushFrame() {
     ectx.clearRect(0,0,W,H);
     ectx.drawImage(cv,0,0);
@@ -1587,11 +1997,11 @@ async function exportVideo() {
       const fadeStart = performance.now();
       while(performance.now() - fadeStart < FADE_MS) {
         const alpha = (performance.now() - fadeStart) / FADE_MS;
-        drawScene(scenes[si-1], 1-alpha);
+        drawScene(scenes[si-1], 1-alpha, 1); // scene ก่อนหน้าอยู่ท้าย scene แล้ว (progress≈1)
         ctx.globalAlpha = alpha;
-        if(sc.type==='logo')      drawLogo(1);
+        if(sc.type==='logo')      drawLogo(1, sc.isOutro);
         else if(sc.type==='hook') drawHook(1);
-        else                      drawProduct(sc.img||null, 1);
+        else drawProduct(sc.img||null, 1, { progress: 0, sceneDur: sc.dur, imgIndex: sc.imgIndex||0 });
         ctx.globalAlpha = 1;
         pushFrame();
         const elapsed = performance.now() - renderStart;
@@ -1605,10 +2015,11 @@ async function exportVideo() {
     const sceneMs    = sc.dur * 1000;
     const sceneStart = performance.now();
     while(performance.now() - sceneStart < sceneMs) {
+      const sceneProgress = Math.min(1, (performance.now()-sceneStart) / sceneMs);
       if(sc.type==='logo' && logoVid?.duration) {
         logoVid.currentTime = ((performance.now()-sceneStart)/1000) % logoVid.duration;
       }
-      drawScene(sc, 1);
+      drawScene(sc, 1, sceneProgress);
       pushFrame();
       const elapsed = performance.now() - renderStart;
       document.getElementById('prog-fill').style.width = Math.min(100, Math.round(elapsed/totalMs*100))+'%';
@@ -1704,38 +2115,46 @@ async function uploadToDrive() {
   const btn = document.getElementById('btn-upload-drive');
   btn.disabled = true; btn.innerHTML = '<span class="spin"></span> กำลัง Upload...';
 
-  const pid      = document.getElementById('product-id').value.trim();
-  const fileName = 'bengen-video-' + Date.now() + '.mp4';
-
+  const pid = document.getElementById('product-id').value.trim();
   setUploadStatus('info', 'กำลัง Upload ขึ้น Drive... (ไฟล์ใหญ่อาจใช้เวลาสักครู่)');
 
-  try {
-    // ใช้ FormData — เร็วกว่า Base64 มาก
-    const formData = new FormData();
-    formData.append('action',    'uploadVideo');
-    formData.append('productId', pid);
-    formData.append('fileName',  fileName);
-    formData.append('video',     exportedBlob, fileName);
+  const result = await uploadVideoBlobToDrive(exportedBlob, pid, appsUrl, (msg) => setUploadStatus('info', msg));
 
-    // Apps Script ไม่รองรับ multipart — แปลงเป็น Base64 แต่แบ่งส่ง
+  if (result.success) {
+    setUploadStatus('ok', '✅ Upload สำเร็จ!' + (result.driveUrl ? ' <a href="'+result.driveUrl+'" target="_blank" style="color:var(--pn)">เปิดใน Drive</a>' : ''));
+    toast('✅ Upload Drive สำเร็จ!');
+  } else {
+    setUploadStatus('warn',
+      '⚠️ Auto-upload ไม่สำเร็จ (' + result.error + ')<br>' +
+      'กด Download แล้ว Upload เองใน Drive ได้เลยครับ'
+    );
+    toast('⚠️ ใช้วิธี Download แทนครับ');
+  }
+
+  btn.disabled=false; btn.innerHTML='☁️ Upload MP4 → Drive';
+}
+
+// Core logic Upload — คืนค่า {success, error, driveUrl} ใช้ได้ทั้ง Manual และ Batch
+async function uploadVideoBlobToDrive(blob, productId, appsUrl, onProgress) {
+  const fileName = 'bengen-video-' + Date.now() + '.mp4';
+
+  try {
     const b64 = await new Promise((res, rej) => {
       const r = new FileReader();
       r.onload  = () => res(r.result);
       r.onerror = rej;
-      r.readAsDataURL(exportedBlob);
+      r.readAsDataURL(blob);
     });
 
-    setUploadStatus('info', `ขนาดไฟล์: ${(exportedBlob.size/1024/1024).toFixed(1)} MB — กำลังส่ง...`);
+    if (onProgress) onProgress(`ขนาดไฟล์: ${(blob.size/1024/1024).toFixed(1)} MB — กำลังส่ง...`);
 
     const resp = await fetch(appsUrl, {
       method: 'POST',
       // สำคัญ: ใช้ text/plain แทน application/json เพื่อหลีกเลี่ยง CORS Preflight
-      // Apps Script ไม่รองรับ OPTIONS preflight — text/plain เป็น "simple request" ไม่ต้อง preflight
-      // Apps Script ยัง parse JSON ได้ปกติจาก e.postData.contents ไม่ว่า header จะเป็นอะไร
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({
         action:      'uploadVideo',
-        productId:   pid,
+        productId,
         videoBase64: b64,
         fileName,
       })
@@ -1745,21 +2164,202 @@ async function uploadToDrive() {
     const json = await resp.json().catch(() => ({}));
     if(json.error) throw new Error(json.error);
 
-    const driveUrl = json.driveUrl || json.fileUrl || '';
-    setUploadStatus('ok', '✅ Upload สำเร็จ!' + (driveUrl ? ' <a href="'+driveUrl+'" target="_blank" style="color:var(--pn)">เปิดใน Drive</a>' : ''));
-    toast('✅ Upload Drive สำเร็จ!');
+    return { success: true, driveUrl: json.driveUrl || json.fileUrl || '' };
 
   } catch(err) {
-    // Fallback: Download เก็บไว้แล้ว Upload เองใน Drive
-    setUploadStatus('warn',
-      '⚠️ Auto-upload ไม่สำเร็จ (' + err.message + ')<br>' +
-      'กด Download แล้ว Upload เองใน Drive ได้เลยครับ'
-    );
-    toast('⚠️ ใช้วิธี Download แทนครับ');
+    return { success: false, error: err.message };
+  }
+}
+
+// ═══════════════════════════════════════
+// TEMPLATE BATCH EXPORT — ทำหลายสินค้าในคิวเดียว
+// ═══════════════════════════════════════
+function updateTemplateBatchCount() {
+  const checked = document.querySelectorAll('.batch-product-check:checked').length;
+  document.getElementById('batch-selected-count').textContent = checked;
+  document.getElementById('btn-start-template-batch').disabled = checked === 0;
+
+  const warnEl = document.getElementById('batch-rpd-warning');
+  if (checked > 10) {
+    warnEl.style.display = 'flex';
+    warnEl.innerHTML = `<span>⚠️</span><span>เลือก ${checked} รายการ — แต่ละคลิปใช้เวลา Render+Upload ประมาณ 1-2 นาที รวมอาจใช้เวลานานพอสมควร แนะนำเปิดแท็บนี้ค้างไว้ระหว่างทำ</span>`;
+  } else {
+    warnEl.style.display = 'none';
+  }
+}
+
+function getTemplateBatchSelectedRows() {
+  const boxes = document.querySelectorAll('.batch-product-check:checked');
+  return Array.from(boxes).map(cb => templateBatchRows[parseInt(cb.dataset.idx)]);
+}
+
+function templateBatchSelectAll(select) {
+  document.querySelectorAll('.batch-product-check').forEach(cb => cb.checked = select);
+  updateTemplateBatchCount();
+}
+
+function stopTemplateBatch() {
+  templateBatchStopRequested = true;
+  toast('⏹️ กำลังหยุด Batch หลังจบรายการปัจจุบัน...');
+}
+
+function updateTemplateBatchProgress(i, total, text) {
+  document.getElementById('batch-progress-text').textContent = text;
+  document.getElementById('batch-progress-bar').style.width  = Math.round((i / total) * 100) + '%';
+}
+
+function addTemplateBatchLog(name, type, msg) {
+  const colors = { loading:'var(--text2)', ok:'var(--green)', err:'var(--red)', warn:'var(--amber)' };
+  const row = document.createElement('div');
+  row.dataset.name = name;
+  row.style.cssText = `padding:5px 8px;background:var(--bg3);border-radius:5px;color:${colors[type]};`;
+  row.textContent = `${name} — ${msg}`;
+  document.getElementById('batch-item-log').appendChild(row);
+  document.getElementById('batch-item-log').scrollTop = document.getElementById('batch-item-log').scrollHeight;
+}
+
+function updateTemplateBatchLog(name, type, msg) {
+  const colors = { loading:'var(--text2)', ok:'var(--green)', err:'var(--red)', warn:'var(--amber)' };
+  const rows = document.querySelectorAll(`#batch-item-log [data-name="${CSS.escape(name)}"]`);
+  const row  = rows[rows.length - 1];
+  if (row) { row.style.color = colors[type]; row.textContent = `${name} — ${msg}`; }
+  else addTemplateBatchLog(name, type, msg);
+}
+
+async function runTemplateBatch() {
+  const rows = getTemplateBatchSelectedRows();
+  if (!rows.length) { toast('⚠️ เลือกอย่างน้อย 1 รายการก่อนครับ'); return; }
+
+  const appsUrl = document.getElementById('apps-script-url').value.trim();
+  if (!appsUrl) { toast('⚠️ ใส่ Apps Script URL ก่อนครับ'); return; }
+
+  const bgmMode = document.getElementById('batch-bgm-mode').value; // none / same / random
+
+  if (bgmMode === 'random' && !bgmFilesList.length) {
+    toast('⏳ กำลังโหลดรายชื่อเพลงสำหรับสุ่ม...');
+    await loadBgmListFromDrive();
+  }
+  if (bgmMode === 'same' && !bgmFile) {
+    toast('⚠️ ยังไม่ได้เลือกเพลงใน Card BGM ด้านบน — จะ Export แบบไม่มี BGM แทน');
   }
 
-  btn.disabled=false; btn.innerHTML='☁️ Upload MP4 → Drive';
+  templateBatchRunning = true;
+  templateBatchStopRequested = false;
+
+  document.getElementById('batch-controls').style.display = 'none';
+  document.getElementById('batch-progress').style.display = 'block';
+  document.getElementById('batch-summary').style.display  = 'none';
+  document.getElementById('batch-item-log').innerHTML     = '';
+
+  document.getElementById('btn-load-products').disabled = true;
+
+  const results = { success: [], failed: [], skipped: [] };
+  const usedBgmIds = new Set(); // กันสุ่มซ้ำถ้าเพลงพอ
+
+  for (let i = 0; i < rows.length; i++) {
+    if (templateBatchStopRequested) break;
+    const row  = rows[i];
+    const name = row.productName || row.id || `รายการที่ ${i+1}`;
+
+    updateTemplateBatchProgress(i, rows.length, `กำลังทำ ${i+1}/${rows.length}: ${name}`);
+
+    if (row.voiceStatus !== 'done') {
+      results.skipped.push({ name, reason: 'ยังไม่มีเสียงพากย์' });
+      addTemplateBatchLog(name, 'warn', '⏭️ ข้าม — ยังไม่มีเสียงพากย์ (voiceStatus ≠ done)');
+      continue;
+    }
+
+    try {
+      addTemplateBatchLog(name, 'loading', 'กำลังเลือกสินค้า...');
+      selectProductForBatch(row);
+
+      addTemplateBatchLog(name, 'loading', 'กำลังโหลดรูปจาก Drive...');
+      await loadImagesFromDrive();
+      if (!imgs.length) throw new Error('โหลดรูปไม่สำเร็จ หรือไม่มีรูปในโฟลเดอร์');
+
+      addTemplateBatchLog(name, 'loading', 'กำลังโหลดเสียงจาก Drive...');
+      await loadVoiceFromDrive();
+      if (!voiceUrl || !voiceUrl.startsWith('blob:')) throw new Error('โหลดเสียงไม่สำเร็จ');
+
+      // ตั้งค่า BGM ตามโหมดที่เลือก
+      if (bgmMode === 'random' && bgmFilesList.length) {
+        const usable = bgmFilesList.filter(f => !f.tooLarge);
+        let pool = usable.filter(f => !usedBgmIds.has(f.id));
+        if (!pool.length) pool = usable; // เพลงไม่พอ ใช้ซ้ำได้
+        if (pool.length) {
+          const picked = pool[Math.floor(Math.random() * pool.length)];
+          usedBgmIds.add(picked.id);
+          addTemplateBatchLog(name, 'loading', `กำลังโหลด BGM: ${picked.name}...`);
+          const bgmResult = await loadBgmByFileId(picked.id);
+          if (!bgmResult.success) addTemplateBatchLog(name, 'warn', '⚠️ โหลด BGM ไม่สำเร็จ — Export ต่อแบบไม่มี BGM');
+        }
+      } else if (bgmMode === 'none') {
+        bgmFile = null;
+      }
+      // bgmMode === 'same' ใช้ bgmFile ที่โหลดไว้ก่อนแล้วเลย ไม่ต้องทำอะไรเพิ่ม
+
+      addTemplateBatchLog(name, 'loading', 'กำลัง Render + แก้ไฟล์ให้ Seek ได้...');
+      await exportVideo();
+      if (!exportedBlob) throw new Error('Export ไม่สำเร็จ');
+
+      addTemplateBatchLog(name, 'loading', 'กำลัง Upload ขึ้น Drive...');
+      const pid = document.getElementById('product-id').value.trim();
+      const uploadResult = await uploadVideoBlobToDrive(exportedBlob, pid, appsUrl);
+      if (!uploadResult.success) throw new Error('Upload ไม่สำเร็จ: ' + uploadResult.error);
+
+      results.success.push(name);
+      updateTemplateBatchLog(name, 'ok', '✅ สำเร็จ — Upload Drive แล้ว');
+
+    } catch (err) {
+      results.failed.push({ name, error: err.message });
+      updateTemplateBatchLog(name, 'err', '❌ ' + err.message);
+    }
+
+    // เคลียร์ state ก่อนรายการถัดไป กันข้อมูลเก่าหลงเหลือข้ามสินค้า
+    imgs = [];
+    voiceUrl = '';
+    voiceFile = null;
+    exportedBlob = null;
+    renderImageManager();
+  }
+
+  templateBatchRunning = false;
+  document.getElementById('btn-load-products').disabled = false;
+
+  showTemplateBatchSummary(results, templateBatchStopRequested);
 }
+
+function showTemplateBatchSummary(results, wasStopped) {
+  document.getElementById('batch-progress').style.display = 'none';
+  const el = document.getElementById('batch-summary');
+  el.style.display = 'block';
+
+  const total = results.success.length + results.failed.length + results.skipped.length;
+  const type  = results.failed.length === 0 ? 'ok' : (results.success.length === 0 ? 'err' : 'warn');
+  const cls   = { ok:'ok-row', err:'warn-row', warn:'warn-row' }[type];
+
+  let html = `<div class="${cls}" style="flex-direction:column;align-items:flex-start;gap:6px;">`;
+  html += `<div>${wasStopped ? '⏹️ หยุด Batch แล้ว' : '🏁 Batch เสร็จสิ้น'} — สำเร็จ ${results.success.length}/${total} รายการ`;
+  if (results.skipped.length) html += ` (ข้าม ${results.skipped.length})`;
+  html += `</div>`;
+  if (results.failed.length) {
+    html += `<div style="font-size:11px;">รายการที่พลาด:<br>` +
+      results.failed.map(f => `• ${f.name}: ${f.error}`).join('<br>') + `</div>`;
+  }
+  if (results.skipped.length) {
+    html += `<div style="font-size:11px;">รายการที่ข้าม:<br>` +
+      results.skipped.map(s => `• ${s.name}: ${s.reason}`).join('<br>') + `</div>`;
+  }
+  html += `</div>`;
+  el.innerHTML = html;
+
+  toast(wasStopped ? '⏹️ หยุด Batch แล้ว' : `🏁 Batch เสร็จ — สำเร็จ ${results.success.length}/${total}`);
+}
+
+document.getElementById('btn-select-all-products').addEventListener('click', () => templateBatchSelectAll(true));
+document.getElementById('btn-select-none-products').addEventListener('click', () => templateBatchSelectAll(false));
+document.getElementById('btn-start-template-batch').addEventListener('click', runTemplateBatch);
+document.getElementById('btn-stop-template-batch').addEventListener('click', stopTemplateBatch);
 
 function setUploadStatus(type, msg) {
   const el = document.getElementById('upload-status');

@@ -8,6 +8,11 @@ let settings     = {};
 let settingsOpen = false;
 let currentTab   = 'product';
 let allImages    = []; // Base64 images ทั้งหมด
+let imgSelected  = []; // เลือก/ไม่เลือก แต่ละรูป (true = จะถูก save)
+let currentProductId = ''; // ได้จาก Apps Script หลัง saveProduct สำเร็จ
+let currentContentId = ''; // ได้จาก Apps Script หลัง saveProduct สำเร็จ (ใช้ update voiceStatus)
+let activeVoiceScript = ''; // บทพากย์ที่จะใช้ Generate เสียงจริง (session หรือจาก Sheets)
+let loadedFromSheets  = false; // true = กำลังใช้ข้อมูลที่โหลดจาก Sheets แทน session ปัจจุบัน
 
 // ═══════════════════════════════════════
 // INIT
@@ -38,6 +43,7 @@ function bindEvents() {
   // Tabs
   $('tab-btn-product').addEventListener('click', () => switchTab('product'));
   $('tab-btn-script').addEventListener('click',  () => switchTab('script'));
+  $('tab-btn-voice').addEventListener('click',   () => switchTab('voice'));
   // Product tab
   $('btn-fetch').addEventListener('click',         fetchProduct);
   $('btn-generate').addEventListener('click',      generateContent);
@@ -52,6 +58,13 @@ function bindEvents() {
   $('cp-voice').addEventListener('click',   () => copyText('out-voice',   'บทพากย์'));
   $('btn-google-tts').addEventListener('click', openGoogleTTS);
   $('btn-browser-tts').addEventListener('click', browserTTS);
+  $('btn-generate-voice').addEventListener('click', generateAndUploadVoice);
+  $('btn-load-voice-list').addEventListener('click', loadVoicePendingList);
+  $('btn-use-session').addEventListener('click', useSessionVoiceInstead);
+  $('btn-select-all-voice').addEventListener('click', () => batchSelectAll(true));
+  $('btn-select-none-voice').addEventListener('click', () => batchSelectAll(false));
+  $('btn-start-batch').addEventListener('click', runVoiceBatch);
+  $('btn-stop-batch').addEventListener('click', stopBatch);
   $('btn-regen').addEventListener('click',   reGenerate);
   // Dropdowns
   $('s-model').addEventListener('change', () => toggleCustom('s-model', 's-model-custom'));
@@ -129,9 +142,388 @@ function closeSettings() {
 // ═══════════════════════════════════════
 function switchTab(tab) {
   currentTab = tab;
-  ['product','script'].forEach(t => {
+  ['product','script','voice'].forEach(t => {
     $('tab-btn-' + t).classList.toggle('active', t === tab);
     $('tab-' + t).classList.toggle('active', t === tab);
+  });
+  if (tab === 'voice') syncVoicePreview();
+}
+
+function syncVoicePreview() {
+  // ถ้ากำลังใช้ข้อมูลที่โหลดจาก Sheets อยู่ ไม่ต้อง overwrite ด้วย session ปัจจุบัน
+  if (loadedFromSheets) { renderVoicePreview(); return; }
+
+  activeVoiceScript = $('out-voice')?.value || '';
+  renderVoicePreview();
+}
+
+function renderVoicePreview() {
+  const text = activeVoiceScript || '';
+  const preview = $('voice-script-preview');
+  if (preview) preview.textContent = text || '—';
+  const chars2 = $('voice-chars-2');
+  if (chars2) chars2.textContent = `${text.length.toLocaleString()} / 10,000 chars`;
+
+  const hasScript = !!text.trim();
+  $('voice-empty').style.display  = hasScript ? 'none' : 'block';
+  $('voice-output').style.display = hasScript ? 'flex' : 'none';
+}
+
+// ═══════════════════════════════════════
+// VOICE TAB — โหลดรายการจาก Sheets (ทำงานอิสระจาก Session)
+// ═══════════════════════════════════════
+let voicePendingRows = []; // เก็บรายการล่าสุดไว้ใช้กับ Batch
+
+// รายชื่อ Model TTS ที่รองรับ — แต่ละตัวมีโควต้าแยกกัน
+const TTS_MODELS = ['gemini-3.1-flash-tts-preview', 'gemini-2.5-flash-preview-tts'];
+let exhaustedModels = new Set(); // Model ที่รู้แล้วว่าติด Limit ต่อเนื่อง (reset ตอน reload extension)
+
+async function loadVoicePendingList() {
+  if (!settings.sheetsUrl) { toast('⚠️ ตั้งค่า Apps Script URL ใน ⚙️ ก่อนครับ'); return; }
+
+  const btn = $('btn-load-voice-list');
+  btn.innerHTML = '<span class="spin"></span>';
+  btn.disabled  = true;
+  setVoiceListStatus('info', 'กำลังโหลดรายการจาก Sheets...');
+  $('batch-controls').style.display = 'none';
+  $('batch-summary').style.display  = 'none';
+
+  try {
+    const res  = await fetchWithTimeout(`${settings.sheetsUrl}?action=read&sheet=Content`, {}, 30000);
+    const data = await res.json();
+    const rows = (data.rows || []).filter(r =>
+      r.voiceScript && r.voiceScript.trim() && r.voiceStatus !== 'done'
+    );
+
+    if (!rows.length) {
+      setVoiceListStatus('warn', '⚠️ ไม่พบรายการที่รอสร้างเสียง (voiceStatus ≠ done)');
+      $('voice-pick-list').style.display = 'none';
+      return;
+    }
+
+    rows.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    voicePendingRows = rows;
+
+    const listEl = $('voice-pick-list');
+    listEl.style.display = 'flex';
+    listEl.innerHTML = rows.map((r, i) => `
+      <div class="voice-pick-item" data-i="${i}" style="padding:9px 10px;background:var(--bg3);
+        border-radius:8px;border:1px solid var(--border);display:flex;align-items:flex-start;gap:8px;">
+        <input type="checkbox" class="batch-check" data-i="${i}" style="margin-top:2px;flex-shrink:0;">
+        <div style="flex:1;cursor:pointer;" data-select-i="${i}">
+          <div style="font-size:12px;font-weight:700;margin-bottom:2px;">${escapeHtmlV(r.productName || r.productId)}</div>
+          <div style="font-size:10px;color:var(--text2);">${(r.voiceScript||'').length} chars · ${r.createdAt ? new Date(r.createdAt).toLocaleDateString('th-TH') : ''}</div>
+        </div>
+      </div>`
+    ).join('');
+
+    // คลิกที่ตัวข้อความ → เลือกแบบเดี่ยว (behavior เดิม)
+    listEl.querySelectorAll('[data-select-i]').forEach(el => {
+      const i = parseInt(el.dataset.selectI);
+      el.addEventListener('click', () => selectVoiceItem(rows[i], el.closest('.voice-pick-item'), listEl));
+    });
+
+    // ติ๊ก Checkbox → เข้าโหมด Batch selection
+    listEl.querySelectorAll('.batch-check').forEach(cb => {
+      cb.addEventListener('change', updateBatchSelectedCount);
+    });
+
+    setVoiceListStatus('ok', `✅ พบ ${rows.length} รายการที่รอสร้างเสียง`);
+    $('batch-controls').style.display = 'block'; // โชว์ปุ่ม "เลือกทั้งหมด" ทันที ไม่ต้องรอติ๊กก่อน
+    updateBatchSelectedCount();
+
+  } catch (err) {
+    setVoiceListStatus('err', '❌ ' + err.message);
+  } finally {
+    btn.disabled = false; btn.innerHTML = '🔄 โหลดรายการ';
+  }
+}
+
+function selectVoiceItem(row, el, listEl) {
+  listEl.querySelectorAll('.voice-pick-item').forEach(x => x.style.borderColor = 'var(--border)');
+  if (el) el.style.borderColor = 'var(--pn)';
+
+  currentProductId  = row.productId || '';
+  currentContentId  = row.id || '';
+  activeVoiceScript = row.voiceScript || '';
+  loadedFromSheets  = true;
+
+  $('active-voice-label').style.display = 'block';
+  $('active-voice-name').textContent    = row.productName || row.productId || '—';
+
+  renderVoicePreview();
+  toast('✅ เลือก "' + (row.productName || row.productId) + '" แล้ว');
+}
+
+function useSessionVoiceInstead() {
+  loadedFromSheets = false;
+  $('active-voice-label').style.display = 'none';
+  syncVoicePreview();
+  toast('🔄 กลับไปใช้บทพากย์จาก Content Tab แล้ว');
+}
+
+function setVoiceListStatus(type, msg) {
+  const el = $('voice-list-status');
+  const cls = { info:'row-info', ok:'row-ok', err:'row-err', warn:'row-warn' };
+  el.className = cls[type] || 'row-info';
+  el.style.display = 'flex';
+  el.innerHTML = `<span></span><span>${msg}</span>`;
+}
+
+function escapeHtmlV(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+// ═══════════════════════════════════════
+// BATCH VOICE GENERATOR — ปลอดภัยจาก Rate Limit
+// ═══════════════════════════════════════
+let batchRunning = false;
+let batchStopRequested = false;
+
+function updateBatchSelectedCount() {
+  const checked = document.querySelectorAll('.batch-check:checked').length;
+  $('batch-selected-count').textContent = checked;
+  $('btn-start-batch').disabled = checked === 0;
+
+  // เตือนถ้าเลือกเยอะเกินไป — RPD (Requests/Day) ของ Free Tier อาจต่ำสุดแค่ 100 ครั้ง/วัน
+  const warnEl = $('batch-rpd-warning');
+  if (checked > 50) {
+    warnEl.style.display = 'flex';
+    warnEl.innerHTML = `<span>⚠️</span><span>เลือก ${checked} รายการ — Free Tier บางบัญชีมีโควต้าแค่ 100-500 ครั้ง/วัน ถ้าทำสินค้าอื่นมาแล้วในวันนี้ อาจไม่พอ ลองแบ่งทำหลายรอบครับ</span>`;
+  } else {
+    warnEl.style.display = 'none';
+  }
+}
+
+function getBatchSelectedRows() {
+  const boxes = document.querySelectorAll('.batch-check:checked');
+  return Array.from(boxes).map(cb => voicePendingRows[parseInt(cb.dataset.i)]);
+}
+
+function batchSelectAll(select) {
+  document.querySelectorAll('.batch-check').forEach(cb => cb.checked = select);
+  updateBatchSelectedCount();
+}
+
+// สร้างเสียง + Upload ให้ 1 รายการ — คืนค่า {success, error, directUrl}
+// ไม่พึ่ง UI state กลาง (activeVoiceScript ฯลฯ) เพื่อให้ Batch เรียกซ้ำได้ปลอดภัย
+async function generateVoiceForRow(row, modelOverride) {
+  const text = (row.voiceScript || '').trim();
+  if (!text) return { success: false, error: 'ไม่มีบทพากย์' };
+
+  const voiceName = $('tts-voice').value;
+  const model     = modelOverride || $('tts-model').value;
+
+  try {
+    const pcmBase64 = await callGeminiTTS(text, voiceName, settings.gemini, model);
+    const wavBlob   = pcmToWavBlob(pcmBase64);
+    const wavDataUrl = await blobToDataUrl(wavBlob);
+
+    const res = await fetchWithTimeout(settings.sheetsUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'uploadAudio',
+        productId: row.productId,
+        contentId: row.id,
+        audioBase64: wavDataUrl,
+        fileName: 'voiceover-' + Date.now() + '.wav',
+      })
+    }, 45000);
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json.error) return { success: false, error: json.error || `HTTP ${res.status}`, model };
+
+    return { success: true, directUrl: json.directUrl, model };
+
+  } catch (err) {
+    // เช็คจาก HTTP Status Code จริงก่อน (แม่นสุด) — Fallback เป็นข้อความถ้าไม่มี (เช่น error จาก Apps Script)
+    const isRateLimit = err.httpStatus === 429 || /429|RESOURCE_EXHAUSTED|exceeded your current quota/i.test(err.message);
+
+    // Google บอกเวลาที่ต้องรอมาให้ตรงๆ ใน error message เช่น "Please retry in 10.64s"
+    // แม่นยำกว่าการเดา — ใช้ค่านี้แทนถ้ามี
+    let retryAfterSec = null;
+    const retryMatch = err.message.match(/retry in\s*([\d.]+)\s*s/i);
+    if (retryMatch) retryAfterSec = Math.ceil(parseFloat(retryMatch[1]));
+
+    return { success: false, error: err.message, isRateLimit, retryAfterSec, model };
+  }
+}
+
+async function runVoiceBatch() {
+  const rows = getBatchSelectedRows();
+  if (!rows.length) { toast('⚠️ เลือกอย่างน้อย 1 รายการก่อนครับ'); return; }
+  if (!settings.gemini)   { toast('⚠️ ตั้งค่า Gemini API Key ก่อนครับ'); return; }
+  if (!settings.sheetsUrl){ toast('⚠️ ตั้งค่า Apps Script URL ก่อนครับ'); return; }
+
+  batchRunning = true;
+  batchStopRequested = false;
+
+  $('batch-controls').style.display  = 'none';
+  $('batch-progress').style.display  = 'block';
+  $('batch-summary').style.display   = 'none';
+  $('batch-item-log').innerHTML      = '';
+
+  // ล็อกปุ่มอื่นที่จะยิง Gemini TTS ซ้อนกันได้ — กันชน Rate Limit โดยไม่ตั้งใจ
+  $('btn-load-voice-list').disabled  = true;
+  $('btn-generate-voice').disabled   = true;
+
+  const delayMs = parseInt($('batch-delay').value) || 20000;
+  const results = { success: [], failed: [] };
+
+  for (let i = 0; i < rows.length; i++) {
+    if (batchStopRequested) break;
+    const row  = rows[i];
+    const name = row.productName || row.productId || `รายการที่ ${i+1}`;
+
+    updateBatchProgress(i, rows.length, `กำลังทำ ${i+1}/${rows.length}: ${name}`);
+    addBatchLog(name, 'loading', 'กำลัง Generate...');
+
+    let result;
+    const maxRetries = 2; // ต่อ Model
+    let usedModel = $('tts-model').value;
+
+    // ลำดับ Model ที่จะลอง — เริ่มจากที่เลือกไว้ ตามด้วยตัวสำรอง
+    const modelQueue = [usedModel, ...TTS_MODELS.filter(m => m !== usedModel)];
+
+    outer:
+    for (const model of modelQueue) {
+      if (exhaustedModels.has(model)) continue; // ข้าม Model ที่รู้แล้วว่าหมดโควต้าวันนี้
+
+      let attempt = 0;
+      while (attempt <= maxRetries) {
+        result = await generateVoiceForRow(row, model);
+        usedModel = model;
+        if (result.success) break outer;
+
+        if (result.isRateLimit && attempt < maxRetries) {
+          // ใช้เวลาที่ Google บอกมาตรงๆ (แม่นยำกว่า) ถ้ามี ไม่งั้น fallback เป็น escalating wait
+          const waitSec = result.retryAfterSec
+            ? result.retryAfterSec + 2 // เผื่อ buffer นิดหน่อยกันชนเวลาเป๊ะๆ
+            : 30 + attempt * 20;
+          addBatchLog(name, 'warn', `[${model}] โดน Limit — รอ ${waitSec} วิ ก่อนลองใหม่ (ครั้งที่ ${attempt+1}/${maxRetries})`);
+          await countdownWait(waitSec, (left) => {
+            updateBatchProgress(i, rows.length, `รอ Limit: ${name} (เหลือ ${left} วิ)`);
+          });
+          attempt++;
+          continue;
+        }
+
+        if (result.isRateLimit) {
+          // Retry ครบแล้วยัง Limit อยู่ — ถือว่า Model นี้ใช้ไม่ได้ตอนนี้ (ไม่ว่าจะเป็น Limit รายนาทีหรือรายวัน)
+          // จำไว้กันเสียเวลาลองซ้ำอีกในรอบ Batch นี้ แล้วลอง Model ถัดไปในคิว
+          exhaustedModels.add(model);
+          addBatchLog(name, 'warn', `⛽ "${model}" ยังติด Limit หลัง Retry ครบแล้ว — ลองสลับ Model`);
+          break; // ออกจาก while ไปลอง model ถัดไปใน for
+        }
+
+        break; // error อื่นๆ ที่ไม่ใช่ Rate Limit — ไม่ retry ไม่สลับ model จบเลย
+      }
+
+      // ถ้า error ไม่ใช่ rate limit เลย ไม่ต้องลอง model ถัดไปต่อ (คงเป็น error เดิม)
+      if (result && !result.success && !result.isRateLimit) break;
+    }
+
+    if (result.success) {
+      results.success.push(name);
+      updateBatchLog(name, 'ok', `✅ สำเร็จ (${usedModel})`);
+    } else {
+      results.failed.push({ name, error: result.error });
+      updateBatchLog(name, 'err', '❌ ' + result.error);
+
+      // ถ้า Model ทุกตัวที่มีหมดโควต้าหมดแล้ว ไม่มีประโยชน์จะทำรายการถัดไปต่อ — หยุด Batch เลย
+      if (TTS_MODELS.every(m => exhaustedModels.has(m))) {
+        addBatchLog('⛔ ระบบ', 'err', 'ติด Limit ครบทุก Model TTS แล้ว — หยุด Batch ทันที ลองใหม่ภายหลังครับ');
+        batchStopRequested = true;
+        break;
+      }
+    }
+
+    // หน่วงเวลาก่อนตัวถัดไป (ยกเว้นตัวสุดท้าย หรือถ้าถูกสั่งหยุด)
+    if (i < rows.length - 1 && !batchStopRequested) {
+      const waitSec = Math.round(delayMs / 1000);
+      await countdownWait(waitSec, (left) => {
+        updateBatchProgress(i, rows.length, `พักก่อนตัวถัดไป... (${left} วิ)`);
+      });
+    }
+  }
+
+  batchRunning = false;
+  $('btn-load-voice-list').disabled = false;
+  $('btn-generate-voice').disabled  = false;
+  showBatchSummary(results, batchStopRequested);
+}
+
+function stopBatch() {
+  batchStopRequested = true;
+  toast('⏹️ กำลังหยุด Batch หลังจบรายการปัจจุบัน...');
+}
+
+function updateBatchProgress(i, total, text) {
+  $('batch-progress-text').textContent = text;
+  $('batch-progress-bar').style.width  = Math.round((i / total) * 100) + '%';
+}
+
+function addBatchLog(name, type, msg) {
+  const colors = { loading:'var(--text2)', ok:'var(--green)', err:'var(--red)', warn:'var(--amber)' };
+  const row = document.createElement('div');
+  row.dataset.name = name;
+  row.style.cssText = `padding:5px 8px;background:var(--bg3);border-radius:5px;color:${colors[type]};`;
+  row.textContent = `${escapeHtmlV(name)} — ${msg}`;
+  $('batch-item-log').appendChild(row);
+  $('batch-item-log').scrollTop = $('batch-item-log').scrollHeight;
+}
+
+function updateBatchLog(name, type, msg) {
+  const colors = { loading:'var(--text2)', ok:'var(--green)', err:'var(--red)', warn:'var(--amber)' };
+  const rows = $('batch-item-log').querySelectorAll(`[data-name="${CSS.escape(name)}"]`);
+  const row  = rows[rows.length - 1];
+  if (row) {
+    row.style.color = colors[type];
+    row.textContent = `${name} — ${msg}`;
+  } else {
+    addBatchLog(name, type, msg);
+  }
+}
+
+function showBatchSummary(results, wasStopped) {
+  $('batch-progress').style.display = 'none';
+  const el = $('batch-summary');
+  el.style.display = 'block';
+
+  const total = results.success.length + results.failed.length;
+  const type  = results.failed.length === 0 ? 'ok' : (results.success.length === 0 ? 'err' : 'warn');
+  const cls   = { ok:'row-ok', err:'row-err', warn:'row-warn' }[type];
+
+  let html = `<div class="${cls}" style="flex-direction:column;align-items:flex-start;gap:6px;">`;
+  html += `<div>${wasStopped ? '⏹️ หยุด Batch แล้ว' : '🏁 Batch เสร็จสิ้น'} — สำเร็จ ${results.success.length}/${total} รายการ</div>`;
+  if (results.failed.length) {
+    html += `<div style="font-size:11px;">รายการที่พลาด:<br>` +
+      results.failed.map(f => `• ${escapeHtmlV(f.name)}: ${escapeHtmlV(f.error)}`).join('<br>') +
+      `</div>`;
+  }
+  html += `</div>`;
+  el.innerHTML = html;
+
+  toast(wasStopped ? '⏹️ หยุด Batch แล้ว' : `🏁 Batch เสร็จ — สำเร็จ ${results.success.length}/${total}`);
+
+  // Refresh รายการ (รายการที่สำเร็จจะหายไปเพราะ voiceStatus=done แล้ว)
+  loadVoicePendingList();
+}
+
+// นับถอยหลังพร้อม callback อัปเดต UI ทุกวินาที
+function countdownWait(totalSec, onTick) {
+  return new Promise(resolve => {
+    let left = totalSec;
+    onTick(left);
+    const timer = setInterval(() => {
+      left--;
+      if (batchStopRequested) { clearInterval(timer); resolve(); return; }
+      if (left <= 0) { clearInterval(timer); resolve(); return; }
+      onTick(left);
+    }, 1000);
   });
 }
 
@@ -199,6 +591,7 @@ async function fetchProduct() {
 
     product   = result;
     allImages = [product.imageUrl, ...(product.extraImages || [])].filter(Boolean);
+    imgSelected = allImages.map(() => true);
 
     renderProduct(product);
     setRow('fetch-status', 'ok', `✅ ดึงข้อมูลสำเร็จ (${result.source})`);
@@ -229,18 +622,39 @@ function renderProduct(p) {
   if (allImages.length > 1) {
     gallery.style.display = 'flex';
     gallery.innerHTML = allImages.map((src, i) => `
-      <img src="${src}" data-i="${i}" class="${i===0?'active':''}" title="${i===0?'รูปหลัก':'คลิกเลือก | Ctrl+คลิก Download'}">`
+      <div class="thumb-item" data-i="${i}" style="position:relative;flex-shrink:0;">
+        <img src="${src}" data-i="${i}" class="${i===0?'active':''}"
+          style="opacity:${imgSelected[i]===false?'0.3':'1'};"
+          title="${i===0?'รูปหลัก':'คลิกเลือก | Ctrl+คลิก Download'}">
+        <button class="thumb-remove" data-i="${i}" title="${imgSelected[i]===false?'กดเพื่อใช้รูปนี้':'กดเพื่อไม่ใช้รูปนี้'}"
+          style="position:absolute;top:-4px;right:-4px;width:18px;height:18px;border-radius:50%;
+          background:${imgSelected[i]===false?'var(--green)':'var(--red)'};color:#fff;border:none;
+          font-size:11px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;
+          font-weight:700;">${imgSelected[i]===false?'+':'×'}</button>
+      </div>`
     ).join('');
-    gallery.querySelectorAll('img').forEach((img, i) => {
+
+    gallery.querySelectorAll('img[data-i]').forEach((img, i) => {
       img.addEventListener('click', e => {
         if (e.ctrlKey || e.metaKey) { downloadImg(allImages[i], `product-${i+1}.jpg`); return; }
         setMainImg(allImages[i]);
-        gallery.querySelectorAll('img').forEach(im => im.classList.remove('active'));
+        gallery.querySelectorAll('img[data-i]').forEach(im => im.classList.remove('active'));
         img.classList.add('active');
       });
     });
+
+    gallery.querySelectorAll('.thumb-remove').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const i = parseInt(btn.dataset.i);
+        imgSelected[i] = !imgSelected[i];
+        renderProduct(product);
+      });
+    });
+
+    const selCount = imgSelected.filter(Boolean).length;
     $('btn-dl-all').style.display  = 'block';
-    $('btn-dl-all').textContent    = `⬇️ Download รูปทั้งหมด (${allImages.length} ภาพ)`;
+    $('btn-dl-all').textContent    = `⬇️ Download รูปที่เลือก (${selCount}/${allImages.length} ภาพ)`;
   } else {
     gallery.style.display         = 'none';
     $('btn-dl-all').style.display = 'none';
@@ -310,6 +724,8 @@ async function fetchImagesFromProductPage() {
     // Merge รูปใหม่เข้า product
     const newImgs = [result.imageUrl, ...(result.extraImages||[])].filter(Boolean);
     allImages = [...new Set([...allImages, ...newImgs])];
+    // เพิ่ม selected = true ให้รูปใหม่ที่เพิ่มเข้ามา (คงค่าเดิมของรูปที่มีอยู่แล้ว)
+    while (imgSelected.length < allImages.length) imgSelected.push(true);
 
     if (!product) product = result;
     else {
@@ -391,7 +807,7 @@ Platform: ${plats[platform]}
 (แบ่ง timestamp ชัดเจน รวม 25-30 วิ)
 
 📝 CAPTION
-(โพสต์ + emoji + hashtag ภาษาไทย)
+(ข้อความโพสต์ + hashtag ภาษาไทย รวมกันทั้งหมดต้องไม่เกิน 150 ตัวอักษร นับรวม hashtag และ emoji ด้วย กระชับ ตรงประเด็น)
 
 🎤 บทพากย์
 (อ่านออกเสียง 25-30 วิ ภาษาไทยเป็นธรรมชาติ ไม่เป็นทางการ)`;
@@ -401,10 +817,12 @@ Platform: ${plats[platform]}
   setRow('gen-status', 'info', `กำลังใช้ ${model}...`);
 
   try {
-    const res  = await fetch(
+    const res  = await fetchWithTimeout(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${settings.gemini}`,
       { method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{temperature:.85, maxOutputTokens:1400} }) }
+        body: JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{temperature:.85, maxOutputTokens:1400} }) },
+      30000,
+      'Gemini API'
     );
     const data = await res.json();
     if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}`);
@@ -429,9 +847,9 @@ Platform: ${plats[platform]}
   } catch (err) {
     setRow('gen-status', 'err', '❌ ' + err.message);
     toast('❌ ' + err.message);
+  } finally {
+    btn.disabled = false; btn.innerHTML = '✨ สร้าง Content + บทพากย์';
   }
-
-  btn.disabled = false; btn.innerHTML = '✨ สร้าง Content + บทพากย์';
 }
 
 function getModel() {
@@ -443,6 +861,30 @@ function getModel() {
 // ═══════════════════════════════════════
 // SAVE TO SHEETS + DRIVE
 // ═══════════════════════════════════════
+// ═══════════════════════════════════════
+// FETCH WITH TIMEOUT — กัน Spinner ค้างตลอดไป
+// ถ้าไม่ตอบกลับภายในเวลาที่กำหนด จะ Abort แล้วแจ้งเตือน
+// (งานฝั่ง Server อาจสำเร็จแล้วจริงๆ แค่ Response ไม่กลับมาถึง)
+// ═══════════════════════════════════════
+async function fetchWithTimeout(url, options, timeoutMs = 45000, serviceName = 'Apps Script') {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(timer);
+    return res;
+  } catch (err) {
+    clearTimeout(timer);
+    if (err.name === 'AbortError') {
+      throw new Error(
+        `หมดเวลารอ (${Math.round(timeoutMs/1000)} วิ) — ${serviceName} อาจทำงานเสร็จแล้วจริงๆ ` +
+        `แค่ตอบกลับมาช้าเกินไป ${serviceName === 'Apps Script' ? 'ลองเช็ค Sheets/Drive ดูก่อนนะครับ ถ้ายังไม่มีข้อมูลค่อยลองกดใหม่' : 'ลองกดใหม่อีกครั้งครับ'}`
+      );
+    }
+    throw err;
+  }
+}
+
 async function saveToSheetsAndDrive() {
   if (!product)           { toast('⚠️ ดึงข้อมูลสินค้าก่อนครับ'); return; }
   if (!settings.sheetsUrl){ toast('⚠️ ตั้งค่า Apps Script URL ใน ⚙️ ก่อน'); return; }
@@ -470,9 +912,9 @@ async function saveToSheetsAndDrive() {
         ratingCount:     product.ratingCount,
         sales:           product.sales,
         description:     product.description || '',
-        // รูปภาพ — ส่งเป็น Base64 ให้ Apps Script upload ขึ้น Drive
-        images:          allImages.filter(Boolean),
-        imageCount:      allImages.length,
+        // รูปภาพ — ส่งเฉพาะรูปที่เลือกไว้ (imgSelected) ให้ Apps Script upload ขึ้น Drive
+        images:          allImages.filter((img, i) => img && imgSelected[i] !== false),
+        imageCount:      allImages.filter((img, i) => img && imgSelected[i] !== false).length,
         // Content ที่ Generate แล้ว (ถ้ามี)
         hook:            $('out-hook').value    || '',
         script:          $('out-script').value  || '',
@@ -483,14 +925,18 @@ async function saveToSheetsAndDrive() {
       }
     };
 
-    const res = await fetch(settings.sheetsUrl, {
+    const res = await fetchWithTimeout(settings.sheetsUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
-    });
+    }, 60000); // upload รูปหลายรูปอาจใช้เวลานาน ให้ 60 วิ
 
     const json = await res.json().catch(() => ({}));
     if (!res.ok || json.error) throw new Error(json.error || `HTTP ${res.status}`);
+
+    // เก็บ productId/contentId ไว้ใช้ตอน Generate เสียง
+    currentProductId = json.productId || payload.data.id;
+    currentContentId = json.contentId || '';
 
     setRow('save-status', 'ok',
       `✅ บันทึกลง Sheets แล้ว${json.driveFolder ? ` · Drive: ${json.driveFolder}` : ''}`
@@ -500,16 +946,165 @@ async function saveToSheetsAndDrive() {
   } catch (err) {
     setRow('save-status', 'err', '❌ ' + err.message);
     toast('❌ ' + err.message);
+  } finally {
+    btn.disabled = false; btn.innerHTML = '💾 บันทึกลง Sheets + Drive';
+  }
+}
+
+// ═══════════════════════════════════════
+// AUTO TTS — เรียก Gemini TTS API ตรงๆ + Upload Drive ในคลิกเดียว
+// ═══════════════════════════════════════
+async function generateAndUploadVoice() {
+  const text = (activeVoiceScript || '').trim();
+  if (!text) { toast('⚠️ ยังไม่มีบทพากย์ — Generate Content หรือโหลดจาก Sheets ก่อนครับ'); return; }
+  if (!settings.gemini) { toast('⚠️ ตั้งค่า Gemini API Key ใน ⚙️ ก่อนครับ'); return; }
+  if (!settings.sheetsUrl) { toast('⚠️ ตั้งค่า Apps Script URL ใน ⚙️ ก่อนครับ'); return; }
+  if (!currentProductId) { toast('⚠️ ยังไม่มีสินค้าที่เลือก — บันทึกสินค้าก่อน หรือโหลดจาก Sheets ก่อนครับ'); return; }
+
+  const btn = $('btn-generate-voice');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> กำลัง Generate เสียง...';
+  setTTSStatus('info', 'กำลังเรียก Gemini TTS API...');
+
+  try {
+    const voiceName = $('tts-voice').value;
+    const model     = $('tts-model').value;
+    const pcmBase64 = await callGeminiTTS(text, voiceName, settings.gemini, model);
+
+    setTTSStatus('info', 'ได้เสียงแล้ว — กำลังแปลงเป็น WAV...');
+    const wavBlob = pcmToWavBlob(pcmBase64);
+
+    const player = $('tts-preview');
+    player.src = URL.createObjectURL(wavBlob);
+    player.style.display = 'block';
+
+    setTTSStatus('info', 'กำลัง Upload ขึ้น Drive...');
+    const wavDataUrl = await blobToDataUrl(wavBlob);
+
+    const res = await fetchWithTimeout(settings.sheetsUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'uploadAudio',
+        productId: currentProductId,
+        contentId: currentContentId,
+        audioBase64: wavDataUrl,
+        fileName: 'voiceover-' + Date.now() + '.wav',
+      })
+    }, 45000);
+
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json.error) throw new Error(json.error || `HTTP ${res.status}`);
+
+    setTTSStatus('ok', `✅ Generate + Upload สำเร็จ! เสียง: ${voiceName}${json.directUrl ? ` · <a href="${json.directUrl}" target="_blank" style="color:var(--pn);">เปิดใน Drive</a>` : ''}`);
+    toast('✅ เสียงพร้อมแล้ว! Upload ขึ้น Drive เรียบร้อย');
+
+  } catch (err) {
+    setTTSStatus('err', '❌ ' + err.message);
+    toast('❌ ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🎙️ Generate + Upload ขึ้น Drive';
+  }
+}
+
+// เรียก Gemini TTS API โดยตรง — ได้ PCM base64 กลับมา (24kHz, 16-bit, mono)
+async function callGeminiTTS(text, voiceName, apiKey, model) {
+  model = model || 'gemini-3.1-flash-tts-preview';
+  const res = await fetchWithTimeout(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text }] }],
+        generationConfig: {
+          responseModalities: ['AUDIO'],
+          speechConfig: {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName } }
+          }
+        }
+      })
+    },
+    // Audio generation ใช้เวลานานกว่า Text ธรรมดามาก — โดยเฉพาะ Preview model
+    // ตั้ง Timeout ให้กว้างพอ (75 วิ) ไม่ให้ตัดกลางคันตอนกำลังสร้างเสียงอยู่จริงๆ
+    75000,
+    'Gemini TTS API'
+  );
+
+  const data = await res.json();
+  if (!res.ok) {
+    const err = new Error(data.error?.message || `HTTP ${res.status}`);
+    err.httpStatus = res.status; // เก็บ Status Code จริงไว้ — เช็คแม่นกว่าเดาจากข้อความ
+    throw err;
   }
 
-  btn.disabled = false; btn.innerHTML = '💾 บันทึกลง Sheets + Drive';
+  const part = data.candidates?.[0]?.content?.parts?.[0];
+  const inlineData = part?.inlineData || part?.inline_data;
+  if (!inlineData?.data) throw new Error('Gemini ไม่ส่งข้อมูลเสียงกลับมา (ลองเปลี่ยนเสียงหรือบทพากย์)');
+
+  return inlineData.data; // base64 PCM
+}
+
+// แปลง PCM (raw, ไม่มี header) → WAV Blob ที่เล่นได้ทันที
+function pcmToWavBlob(base64Pcm, sampleRate = 24000, numChannels = 1, bitsPerSample = 16) {
+  const binary = atob(base64Pcm);
+  const len = binary.length;
+  const pcmBytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) pcmBytes[i] = binary.charCodeAt(i);
+
+  const byteRate   = sampleRate * numChannels * bitsPerSample / 8;
+  const blockAlign = numChannels * bitsPerSample / 8;
+  const dataSize   = pcmBytes.length;
+
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view   = new DataView(buffer);
+
+  const writeStr = (offset, str) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  };
+
+  writeStr(0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM format
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitsPerSample, true);
+  writeStr(36, 'data');
+  view.setUint32(40, dataSize, true);
+
+  new Uint8Array(buffer, 44).set(pcmBytes);
+
+  return new Blob([buffer], { type: 'audio/wav' });
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload  = () => resolve(r.result);
+    r.onerror = reject;
+    r.readAsDataURL(blob);
+  });
+}
+
+function setTTSStatus(type, msg) {
+  const el = $('tts-status');
+  const cls = { info:'row-info', ok:'row-ok', err:'row-err', warn:'row-warn' };
+  el.className = cls[type] || 'row-info';
+  el.style.display = 'flex';
+  el.innerHTML = `<span></span><span>${msg}</span>`;
 }
 
 // ═══════════════════════════════════════
 // ELEVENLABS WEB (ไม่ใช้ API)
 // ═══════════════════════════════════════
 function openGoogleTTS() {
-  const text = $('out-voice').value.trim();
+  const text = (activeVoiceScript || $('out-voice').value || '').trim();
   if (!text) { toast('⚠️ ยังไม่มีบทพากย์ — Generate ก่อนครับ'); return; }
 
   navigator.clipboard.writeText(text)
@@ -532,7 +1127,7 @@ function openGoogleTTS() {
 // BROWSER TTS
 // ═══════════════════════════════════════
 function browserTTS() {
-  const text = $('out-voice').value.trim();
+  const text = (activeVoiceScript || $('out-voice').value || '').trim();
   if (!text) { toast('⚠️ ยังไม่มีบทพากย์'); return; }
   window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
@@ -571,12 +1166,13 @@ function downloadImg(src, name) {
 }
 
 async function downloadAllImages() {
-  if (!allImages.length) { toast('⚠️ ไม่มีรูป'); return; }
+  const selectedImgs = allImages.filter((img, i) => img && imgSelected[i] !== false);
+  if (!selectedImgs.length) { toast('⚠️ ไม่มีรูปที่เลือกไว้'); return; }
   const slug = (product?.name||'product').substring(0,15).replace(/[^ก-๙a-zA-Z0-9]/g,'-');
-  toast(`⬇️ Download ${allImages.length} รูป...`);
-  for (let i = 0; i < allImages.length; i++) {
+  toast(`⬇️ Download ${selectedImgs.length} รูป...`);
+  for (let i = 0; i < selectedImgs.length; i++) {
     await sleep(300);
-    downloadImg(allImages[i], `${slug}-${i+1}.jpg`);
+    downloadImg(selectedImgs[i], `${slug}-${i+1}.jpg`);
   }
 }
 
