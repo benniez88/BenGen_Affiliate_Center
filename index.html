@@ -6,7 +6,7 @@
 <title>BenGen Video Template v3</title>
 <!-- ffmpeg.wasm — ใช้ Remux วิดีโอให้ Seek ได้ (แก้ปัญหา MediaRecorder output ไม่มี seek table) -->
 <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800;900&family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800;900&family=Inter:wght@400;600;700;800;900&family=Kanit:wght@700;800;900&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#0a0614;--bg2:#1a1025;--bg3:#120c1e;--bg4:#221535;
@@ -26,6 +26,57 @@ h1{font-size:15px;font-weight:800;background:linear-gradient(90deg,var(--pn),var
 .main{width:100%;max-width:960px;display:grid;grid-template-columns:1fr 1fr;gap:14px;}
 .left{display:flex;flex-direction:column;gap:12px;}
 .right{display:flex;flex-direction:column;gap:12px;}
+
+/* ═══════════════════════════════════════
+   MOBILE RESPONSIVE (Android/iOS Chrome)
+   ═══════════════════════════════════════ */
+@media (max-width: 860px) {
+  body{padding:10px;gap:10px;}
+  h1{font-size:14px;}
+
+  /* Stack เป็นคอลัมน์เดียว — เอา Preview+Export ขึ้นก่อน Settings */
+  .main{
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+  }
+  .right{ order:-1; }
+
+  /* Canvas ใช้พื้นที่หน้าจอให้เต็มที่ขึ้น */
+  canvas{max-width:100%!important;}
+  .canvas-wrap{max-width:380px;margin:0 auto;}
+
+  /* Row 3 คอลัมน์แคบเกินไปบนมือถือ — Stack เป็น 1 คอลัมน์ */
+  .row3{grid-template-columns:1fr;}
+
+  /* การ์ดขยับให้กดง่ายขึ้นบนจอสัมผัส */
+  .card{padding:14px;}
+  .card-title{font-size:12px;}
+
+  /* ปุ่มและ Checkbox ขยายให้กดง่ายขึ้น (Touch target ≥ 24px) */
+  .fx-toggle input[type=checkbox]{width:20px;height:20px;}
+  .fx-toggle label{font-size:13px;}
+  .fx-desc{font-size:11px;}
+
+  input[type=text],input[type=number],select,textarea{font-size:14px;padding:9px 11px;}
+  .btn{padding:11px 16px;font-size:14px;}
+  .btn-sm{padding:8px 12px;}
+
+  /* Thumbnail Reorder/Remove ปุ่มเล็กเกินไป — ขยายให้กดง่ายบนจอสัมผัส */
+  .thumbs img,#thumbs img{width:56px!important;height:56px!important;}
+  .img-badge{width:18px;height:18px;font-size:10px;}
+  .img-btn-remove{width:22px;height:22px;font-size:13px;}
+  .img-btn-move{width:24px;height:20px;font-size:11px;}
+  .batch-product-check,.batch-check{width:22px!important;height:22px!important;}
+}
+
+@media (max-width: 420px) {
+  /* จอแคบมาก (iPhone SE, Android เล็ก) — ลด Gap และ Padding อีกนิด */
+  body{padding:8px;}
+  .card{padding:11px;}
+  .row2{gap:8px;}
+}
+
 
 /* CARD */
 .card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:13px;}
@@ -57,6 +108,20 @@ textarea{resize:vertical;min-height:48px;}
 
 /* THUMB STRIP */
 .thumbs{display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;}
+
+/* Image Manager — Reorder/Remove buttons (responsive sizing) */
+.img-thumb-wrap{position:relative;display:inline-block;margin:3px;}
+.img-badge{position:absolute;top:1px;left:1px;background:var(--pn);color:#000;
+  font-size:9px;font-weight:800;width:15px;height:15px;border-radius:3px;
+  display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:2;}
+.img-btn-remove{position:absolute;top:-5px;right:-5px;width:18px;height:18px;
+  border-radius:50%;background:var(--red);color:#fff;border:none;font-size:11px;
+  line-height:1;cursor:pointer;padding:0;z-index:2;}
+.img-btn-move{position:absolute;bottom:-5px;width:18px;height:16px;
+  border-radius:3px;background:var(--bg4);color:#fff;border:1px solid var(--border);
+  font-size:9px;line-height:1;cursor:pointer;padding:0;z-index:2;}
+.img-btn-up{left:1px;}
+.img-btn-down{right:1px;}
 .thumbs img{width:38px;height:38px;object-fit:cover;border-radius:4px;
   border:1px solid var(--border);cursor:pointer;}
 .thumbs img.active{border-color:var(--pn);}
@@ -136,7 +201,11 @@ canvas{width:100%;max-width:270px;display:block;margin:0 auto;
   <div class="card">
     <div class="card-title">📦 ข้อมูลสินค้า</div>
     <div class="fg"><label>Hook / จุดขาย</label>
-      <input type="text" id="hook-text" placeholder="ของมันต้องมี 🧢" id="hook-text"></div>
+      <input type="text" id="hook-text" placeholder="ของมันต้องมี 🧢"></div>
+    <div class="fg mt6"><label>ชื่อสินค้า (สำหรับ Product Intro)</label>
+      <input type="text" id="intro-product-label" placeholder="เติมอัตโนมัติเมื่อเลือกสินค้า">
+      <div style="font-size:10px;color:var(--text3);margin-top:3px;">ใช้เมื่อเปิด Effect "Product Intro" — แก้ให้สั้นกระชับได้ตามต้องการ</div>
+    </div>
     <div class="row2 mt6">
       <div class="fg"><label>ราคาปกติ</label><input type="text" id="price-orig" placeholder="฿1,590"></div>
       <div class="fg"><label>ราคาลด</label><input type="text" id="price-sale" placeholder="฿990"></div>
@@ -278,6 +347,20 @@ canvas{width:100%;max-width:270px;display:block;margin:0 auto;
     <div class="card-title">✨ Effects (เปิด/ปิดได้อิสระ)</div>
 
     <div class="fx-toggle">
+      <input type="checkbox" id="fx-sparkle">
+      <div><label>✨ Sparkle Overlay</label>
+        <div class="fx-desc">ประกายดาวเล็กๆ ลอยผ่านตอนโชว์ราคา เพิ่มลูกเล่นให้ดูมีชีวิตชีวาขึ้นอีก</div>
+      </div>
+    </div>
+
+    <div class="fx-toggle">
+      <input type="checkbox" id="fx-product-intro">
+      <div><label>🖼️ Product Intro (โชว์รูปสินค้าแทน Avatar)</label>
+        <div class="fx-desc">Intro เปลี่ยนจาก Avatar หมุนๆ เป็นรูปสินค้าเต็มจอ + ชื่อสินค้าตัวใหญ่ขอบดำ สไตล์ Feed รีวิว</div>
+      </div>
+    </div>
+
+    <div class="fx-toggle">
       <input type="checkbox" id="fx-kenburns" checked>
       <div><label>🔍 Ken Burns Effect</label>
         <div class="fx-desc">รูปนิ่ง Zoom/Pan เบาๆ ให้ดูมีชีวิตชีวาขึ้น ไม่ต้องมีคลิปวิดีโอสินค้าจริงก็ดูโปรได้</div>
@@ -288,6 +371,13 @@ canvas{width:100%;max-width:270px;display:block;margin:0 auto;
       <input type="checkbox" id="fx-ducking" checked>
       <div><label>🔊 Audio Ducking</label>
         <div class="fx-desc">BGM เบาลงอัตโนมัติตอนมีเสียงพากย์ ดังเต็มตอน Intro/Outro ฟังเสียงพากย์ชัดขึ้น</div>
+      </div>
+    </div>
+
+    <div class="fx-toggle">
+      <input type="checkbox" id="fx-vibrant" checked>
+      <div><label>✨ Vibrant Look (สว่างสดใสขึ้น)</label>
+        <div class="fx-desc">เพิ่มความสว่าง + ความอิ่มสีของรูปสินค้าเบาๆ ให้ดูสดใสมีชีวิตชีวา ไม่มืดทึบ</div>
       </div>
     </div>
 
@@ -624,6 +714,7 @@ function selectProduct(row, el, listEl) {
   document.getElementById('hook-text').value = row.hook || row.productName || '';
   document.getElementById('cta-text').value  = '🔗 กดตะกร้าส้มได้เลยครับ';
   document.getElementById('product-id').value = row.productId || row.id || '';
+  document.getElementById('intro-product-label').value = row.productName || '';
 
   // แสดง selected info
   const infoEl = document.getElementById('selected-info');
@@ -642,6 +733,7 @@ function selectProductForBatch(row) {
   document.getElementById('hook-text').value   = row.hook || row.productName || '';
   document.getElementById('cta-text').value    = '🔗 กดตะกร้าส้มได้เลยครับ';
   document.getElementById('product-id').value  = row.productId || row.id || '';
+  document.getElementById('intro-product-label').value = row.productName || '';
 
   const infoEl = document.getElementById('selected-info');
   infoEl.style.display = 'block';
@@ -900,7 +992,7 @@ function renderImageManager() {
 
   imgs.forEach((img, i) => {
     const wrap = document.createElement('div');
-    wrap.style.cssText = 'position:relative;display:inline-block;margin:2px;';
+    wrap.className = 'img-thumb-wrap';
 
     const t = document.createElement('img');
     t.src = img.src;
@@ -914,38 +1006,32 @@ function renderImageManager() {
 
     // เลขลำดับมุมซ้ายบน
     const badge = document.createElement('div');
+    badge.className = 'img-badge';
     badge.textContent = i + 1;
-    badge.style.cssText = 'position:absolute;top:1px;left:1px;background:var(--pn);color:#000;' +
-      'font-size:9px;font-weight:800;width:14px;height:14px;border-radius:3px;' +
-      'display:flex;align-items:center;justify-content:center;pointer-events:none;';
 
     // ปุ่ม ✕ ตัดออก มุมขวาบน
     const btnRemove = document.createElement('button');
+    btnRemove.className = 'img-btn-remove';
     btnRemove.textContent = '✕';
     btnRemove.title = 'ตัดรูปนี้ออกจากวิดีโอ';
-    btnRemove.style.cssText = 'position:absolute;top:-4px;right:-4px;width:16px;height:16px;' +
-      'border-radius:50%;background:var(--red);color:#fff;border:none;font-size:10px;' +
-      'line-height:1;cursor:pointer;padding:0;';
     btnRemove.addEventListener('click', e => { e.stopPropagation(); removeImage(i); });
 
     // ปุ่ม ▲ เลื่อนขึ้น (ซ้ายล่าง)
     const btnUp = document.createElement('button');
+    btnUp.className = 'img-btn-move img-btn-up';
     btnUp.textContent = '▲';
     btnUp.title = 'เลื่อนขึ้น (แสดงก่อน)';
     btnUp.disabled = i === 0;
-    btnUp.style.cssText = 'position:absolute;bottom:-4px;left:1px;width:16px;height:14px;' +
-      'border-radius:3px;background:var(--bg4);color:#fff;border:1px solid var(--border);' +
-      'font-size:8px;line-height:1;cursor:pointer;padding:0;' + (i===0?'opacity:.3;':'');
+    if (i === 0) btnUp.style.opacity = '.3';
     btnUp.addEventListener('click', e => { e.stopPropagation(); moveImage(i, -1); });
 
     // ปุ่ม ▼ เลื่อนลง (ขวาล่าง)
     const btnDown = document.createElement('button');
+    btnDown.className = 'img-btn-move img-btn-down';
     btnDown.textContent = '▼';
     btnDown.title = 'เลื่อนลง (แสดงทีหลัง)';
     btnDown.disabled = i === imgs.length - 1;
-    btnDown.style.cssText = 'position:absolute;bottom:-4px;right:1px;width:16px;height:14px;' +
-      'border-radius:3px;background:var(--bg4);color:#fff;border:1px solid var(--border);' +
-      'font-size:8px;line-height:1;cursor:pointer;padding:0;' + (i===imgs.length-1?'opacity:.3;':'');
+    if (i === imgs.length - 1) btnDown.style.opacity = '.3';
     btnDown.addEventListener('click', e => { e.stopPropagation(); moveImage(i, 1); });
 
     wrap.appendChild(t);
@@ -1134,13 +1220,24 @@ async function loadBgmByFileId(fileId) {
 }
 
 // Input change → redraw
-['hook-text','price-orig','price-sale','cta-text','text-style'].forEach(id => {
+['hook-text','price-orig','price-sale','cta-text','text-style','intro-product-label'].forEach(id => {
   document.getElementById(id).addEventListener('input', redraw);
 });
+document.getElementById('fx-product-intro').addEventListener('change', redraw);
 document.getElementById('frame-dur').addEventListener('change', () => { buildTimeline(); redraw(); });
 document.getElementById('duration-mode').addEventListener('change', () => { updateDurationModeUI(); buildTimeline(); redraw(); });
 document.getElementById('voice-padding').addEventListener('change', () => { buildTimeline(); redraw(); });
-document.getElementById('total-duration-input').addEventListener('input', () => { buildTimeline(); redraw(); });
+document.getElementById('total-duration-input').addEventListener('input', () => {
+  // Auto-สลับโหมดให้เอง ถ้าพิมพ์เลขในช่องนี้แต่ Dropdown ยังไม่ได้ตั้งเป็น "กำหนดความยาวรวม"
+  // กันปัญหาตั้งเลขไว้แต่ลืมสลับโหมด แล้วได้ความยาวจากเสียงแทนที่ตั้งใจ
+  const modeEl = document.getElementById('duration-mode');
+  if (modeEl.value !== 'total') {
+    modeEl.value = 'total';
+    updateDurationModeUI();
+    toast('🔄 สลับเป็นโหมด "กำหนดความยาวรวม" ให้อัตโนมัติ');
+  }
+  buildTimeline(); redraw();
+});
 
 function updateDurationModeUI() {
   const mode = document.getElementById('duration-mode').value;
@@ -1324,9 +1421,64 @@ function drawBar() {
 // ═══════════════════════════════════════
 // DRAW — SCENES
 // ═══════════════════════════════════════
+// ── Product Intro Scene: รูปสินค้าเต็มจอ + ชื่อสินค้าตัวใหญ่ขอบดำ (สไตล์ Feed รีวิว) ──
+function drawProductIntroScene() {
+  const img = imgs[0]; // ใช้รูปแรกเป็นรูปหลักของ Intro
+
+  // Full-bleed cover-fit image (เหมือน drawProduct)
+  const sc = Math.max(W / img.width, (H - BAR_H) / img.height);
+  const dw = img.width * sc, dh = img.height * sc;
+  const dx = (W - dw) / 2;
+  const dy = ((H - BAR_H) - dh) / 2;
+
+  const vibrantOn = document.getElementById('fx-vibrant')?.checked;
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, 0, W, H - BAR_H); ctx.clip();
+  ctx.filter = vibrantOn ? 'brightness(1.22) saturate(1.35) contrast(1.1)' : 'none';
+  ctx.drawImage(img, dx, dy, dw, dh);
+  ctx.filter = 'none';
+  ctx.restore();
+
+  // ชื่อสินค้าตัวใหญ่ — ขาว ขอบดำหนา ฟอนต์ Kanit ExtraBold
+  const label = (document.getElementById('intro-product-label').value || selectedProduct?.productName || '').trim();
+  if (!label) return;
+
+  const fs    = Math.floor(W * 0.088);
+  const maxW  = W * 0.86;
+  ctx.font = '800 ' + fs + 'px Kanit,Sarabun,sans-serif';
+  ctx.textAlign = 'center';
+
+  const lines  = wrapTextCached(ctx, label, maxW, 'intro-'+fs);
+  const lineH  = fs * 1.12;
+  const totalH = lines.length * lineH;
+  const startY = (H - BAR_H) * 0.5 - totalH / 2 + fs * 0.78;
+
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth   = Math.max(7, fs * 0.13);
+  ctx.lineJoin    = 'round';
+  ctx.fillStyle   = '#fff';
+
+  lines.forEach((line, i) => {
+    const y = startY + i * lineH;
+    ctx.strokeText(line, W/2, y);
+    ctx.fillText(line, W/2, y);
+  });
+}
+
 function drawLogo(alpha, isOutro) {
   alpha = (alpha === undefined) ? 1 : alpha;
   ctx.globalAlpha = alpha;
+
+  // ── Product Intro: โชว์รูปสินค้าเต็มจอ + ชื่อสินค้าตัวใหญ่ขอบดำ แทน Avatar ──
+  // ใช้เฉพาะ Intro (ไม่ใช้กับ Outro) เมื่อเปิด Effect ไว้ และมีรูปสินค้าให้ใช้
+  const useProductIntro = !isOutro && document.getElementById('fx-product-intro')?.checked && imgs.length > 0;
+  if (useProductIntro) {
+    drawProductIntroScene();
+    ctx.globalAlpha = 1;
+    drawBar();
+    return;
+  }
 
   // BG gradient
   const bg = ctx.createLinearGradient(0,0,0,H);
@@ -1385,7 +1537,7 @@ function drawLogo(alpha, isOutro) {
 
     // Title text
     const titleFs = Math.floor(W*0.065);
-    ctx.font = '900 '+titleFs+'px Inter,Sarabun,sans-serif';
+    ctx.font = '900 '+titleFs+'px Kanit,Inter,sans-serif';
     ctx.textAlign = 'center';
     const tg = ctx.createLinearGradient(W*0.1, 0, W*0.9, 0);
     tg.addColorStop(0,'#c87dff'); tg.addColorStop(1,'#ff6ec7');
@@ -1417,7 +1569,7 @@ function drawLogo(alpha, isOutro) {
     ctx.restore();
 
     const ctaFs2 = Math.floor(W*0.042);
-    ctx.font = '800 ' + ctaFs2 + 'px Sarabun,sans-serif';
+    ctx.font = '800 ' + ctaFs2 + 'px Kanit,sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = '#fff';
     ctx.shadowColor = 'rgba(0,0,0,.9)'; ctx.shadowBlur = 10;
@@ -1463,7 +1615,7 @@ function drawHook(alpha) {
   // Hook text with word wrap
   const hookFs   = Math.floor(W*0.058);
   const hookMaxW = W * 0.86;
-  ctx.font = '900 '+hookFs+'px Sarabun,sans-serif';
+  ctx.font = '900 '+hookFs+'px Kanit,Sarabun,sans-serif';
   ctx.textAlign = 'center';
 
   if(style==='gradient'){
@@ -1477,7 +1629,7 @@ function drawHook(alpha) {
   ctx.strokeStyle='rgba(0,0,0,.95)'; ctx.lineWidth=8; ctx.lineJoin='round';
 
   // แบ่ง text หลายบรรทัดถ้ายาวเกิน
-  const hookLines = wrapText(ctx, hook, hookMaxW);
+  const hookLines = wrapTextCached(ctx, hook, hookMaxW, 'hook-'+hookFs);
   const hookLineH = hookFs * 1.22;
   // เผื่อพื้นที่ด้านบนเสมอ — บรรทัดแรกไม่มีวันหลุดกรอบ
   const minTopY = hookFs * 0.9;
@@ -1492,6 +1644,37 @@ function drawHook(alpha) {
 
   ctx.globalAlpha = 1;
   drawBar();
+}
+
+// ── Sparkle Overlay: ประกายดาวเล็กๆ ระยิบระยับ (เบา ไม่กระทบ Performance) ──
+const _sparklePositions = [[0.15,0.25],[0.82,0.18],[0.25,0.55],[0.75,0.62],[0.5,0.35],[0.35,0.78]];
+function drawSparkleOverlay(elapsedSec, imgIndex) {
+  const baseAlpha = ctx.globalAlpha;
+  const t = elapsedSec + imgIndex * 1.7; // offset ต่างกันตามรูป ไม่ให้ Sync กันหมดทุกรูป
+
+  _sparklePositions.forEach(([px, py], i) => {
+    const phase = (t * 0.8 + i * 0.9) % 3; // วนซ้ำทุก 3 วิ
+    const twinkle = Math.max(0, Math.sin(phase * Math.PI)); // 0→1→0
+    if (twinkle < 0.05) return;
+
+    const x = W * px, y = (H - BAR_H) * py;
+    const size = 6 + twinkle * 10;
+
+    ctx.globalAlpha = baseAlpha * twinkle;
+    ctx.fillStyle = '#fff';
+    ctx.shadowColor = 'rgba(255,255,255,0.9)';
+    ctx.shadowBlur = size * 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x, y-size);        ctx.lineTo(x+size*0.25, y-size*0.25);
+    ctx.lineTo(x+size, y);        ctx.lineTo(x+size*0.25, y+size*0.25);
+    ctx.lineTo(x, y+size);        ctx.lineTo(x-size*0.25, y+size*0.25);
+    ctx.lineTo(x-size, y);        ctx.lineTo(x-size*0.25, y-size*0.25);
+    ctx.closePath();
+    ctx.fill();
+  });
+
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = baseAlpha;
 }
 
 function drawProduct(img, alpha, opts) {
@@ -1510,6 +1693,8 @@ function drawProduct(img, alpha, opts) {
   const kenBurnsOn = document.getElementById('fx-kenburns')?.checked;
   const vignetteOn = document.getElementById('fx-vignette')?.checked;
   const bounceOn   = document.getElementById('fx-pricebounce')?.checked;
+  const vibrantOn  = document.getElementById('fx-vibrant')?.checked;
+  const sparkleOn  = document.getElementById('fx-sparkle')?.checked;
 
   ctx.fillStyle='#e8e8e8'; ctx.fillRect(0,0,W,H-BAR_H);
 
@@ -1534,26 +1719,42 @@ function drawProduct(img, alpha, opts) {
 
     ctx.save();
     ctx.beginPath(); ctx.rect(0, 0, W, H-BAR_H); ctx.clip(); // กันรูปล้นขอบตอน Zoom/Pan
+    // ── Vibrant Look: เพิ่มความสว่าง + ความอิ่มสี ให้รูปดูสดใสชัดเจนขึ้น ──
+    ctx.filter = vibrantOn ? 'brightness(1.22) saturate(1.35) contrast(1.1)' : 'none';
     ctx.drawImage(img, dx, dy, dw, dh);
+    ctx.filter = 'none';
     ctx.restore();
   }
 
-  // ── Vignette: ขอบมืดรอบภาพเบาๆ ──
+  // ── Vignette: ขอบมืดรอบภาพเบาๆ (Cache ไว้ — ไม่ต้องสร้างใหม่ทุกเฟรม) ──
   if (vignetteOn) {
-    const vg = ctx.createRadialGradient(W/2, (H-BAR_H)*0.42, (H-BAR_H)*0.25, W/2, (H-BAR_H)*0.42, (H-BAR_H)*0.72);
-    vg.addColorStop(0, 'rgba(0,0,0,0)');
-    vg.addColorStop(1, 'rgba(0,0,0,0.35)');
-    ctx.fillStyle = vg;
+    ctx.fillStyle = getCachedGradient('vignette', () => {
+      const vg = ctx.createRadialGradient(W/2, (H-BAR_H)*0.42, (H-BAR_H)*0.25, W/2, (H-BAR_H)*0.42, (H-BAR_H)*0.72);
+      vg.addColorStop(0, 'rgba(0,0,0,0)');
+      vg.addColorStop(1, 'rgba(0,0,0,0.35)');
+      return vg;
+    });
     ctx.fillRect(0, 0, W, H-BAR_H);
   }
 
-  const tg=ctx.createLinearGradient(0,0,0,H*.18);
-  tg.addColorStop(0,'rgba(0,0,0,.75)'); tg.addColorStop(1,'rgba(0,0,0,0)');
+  // ── Sparkle Overlay: ประกายดาวลอยระยิบระยับ ──
+  if (sparkleOn) {
+    drawSparkleOverlay(elapsedSec, imgIndex);
+  }
+
+  const tg = getCachedGradient('topDark', () => {
+    const g = ctx.createLinearGradient(0,0,0,H*.18);
+    g.addColorStop(0,'rgba(0,0,0,.75)'); g.addColorStop(1,'rgba(0,0,0,0)');
+    return g;
+  });
   ctx.fillStyle=tg; ctx.fillRect(0,0,W,H*.18);
 
   const bot=H-BAR_H;
-  const bg=ctx.createLinearGradient(0,bot-H*.32,0,bot);
-  bg.addColorStop(0,'rgba(13,10,20,0)'); bg.addColorStop(1,'rgba(13,10,20,.95)');
+  const bg = getCachedGradient('botDark', () => {
+    const g = ctx.createLinearGradient(0,bot-H*.32,0,bot);
+    g.addColorStop(0,'rgba(13,10,20,0)'); g.addColorStop(1,'rgba(13,10,20,.95)');
+    return g;
+  });
   ctx.fillStyle=bg; ctx.fillRect(0,bot-H*.32,W,H*.32);
 
   const priceFsL = Math.floor(W*0.062);
@@ -1593,7 +1794,7 @@ function drawProduct(img, alpha, opts) {
       ctx.beginPath(); ctx.moveTo(W/2-priceFsL*1.2-tw/2,pY-4);
       ctx.lineTo(W/2-priceFsL*1.2+tw/2,pY-4); ctx.stroke();
     }
-    ctx.font='800 '+priceFsL+'px Sarabun,sans-serif';
+    ctx.font='800 '+priceFsL+'px Kanit,Sarabun,sans-serif';
     const sg=ctx.createLinearGradient(0,pY-priceFsL,0,pY+10);
     sg.addColorStop(0,'#ff6ec7'); sg.addColorStop(1,'#c87dff'); ctx.fillStyle=sg;
     ctx.shadowColor='rgba(200,125,255,.8)'; ctx.shadowBlur=20;
@@ -1601,7 +1802,7 @@ function drawProduct(img, alpha, opts) {
     ctx.restore();
   }
   if(cta){
-    ctx.font='700 '+ctaFs+'px Sarabun,sans-serif'; ctx.textAlign='center';
+    ctx.font='700 '+ctaFs+'px Kanit,Sarabun,sans-serif'; ctx.textAlign='center';
     ctx.fillStyle='rgba(255,255,255,.95)';
     ctx.shadowColor='rgba(0,0,0,.9)'; ctx.shadowBlur=12;
     ctx.fillText(cta, W/2, H-BAR_H-Math.floor(H*0.06)); ctx.shadowBlur=0;
@@ -1636,6 +1837,25 @@ function updateVoiceDurationDisplay(sec) {
 }
 
 // wrap text ให้พอดีกับ maxWidth
+// ═══════════════════════════════════════
+// PERFORMANCE: Cache สิ่งที่คำนวณซ้ำได้ (เดิมคำนวณใหม่ทุกเฟรม ทำให้ Render ช้ามาก
+// จนความยาววิดีโอจริงเกินกว่าที่ตั้งไว้ — Gradient/wrapText ไม่ได้เปลี่ยนทุกเฟรมเลย)
+// ═══════════════════════════════════════
+const _gradientCache = {};
+function getCachedGradient(key, buildFn) {
+  if (!_gradientCache[key]) _gradientCache[key] = buildFn();
+  return _gradientCache[key];
+}
+
+const _wrapTextCache = {};
+function wrapTextCached(ctx, text, maxWidth, fontKey) {
+  const cacheKey = fontKey + '|' + text + '|' + maxWidth;
+  if (_wrapTextCache[cacheKey]) return _wrapTextCache[cacheKey];
+  const result = wrapText(ctx, text, maxWidth);
+  _wrapTextCache[cacheKey] = result;
+  return result;
+}
+
 function wrapText(ctx, text, maxWidth) {
   // แบ่งตามช่องว่างก่อน (สำหรับคำที่มีเว้นวรรค)
   const words = text.split(' ');
@@ -1996,6 +2216,7 @@ async function exportVideo() {
     if(si > 0) {
       const fadeStart = performance.now();
       while(performance.now() - fadeStart < FADE_MS) {
+        const iterStart = performance.now();
         const alpha = (performance.now() - fadeStart) / FADE_MS;
         drawScene(scenes[si-1], 1-alpha, 1); // scene ก่อนหน้าอยู่ท้าย scene แล้ว (progress≈1)
         ctx.globalAlpha = alpha;
@@ -2007,7 +2228,9 @@ async function exportVideo() {
         const elapsed = performance.now() - renderStart;
         document.getElementById('prog-fill').style.width = Math.min(100, Math.round(elapsed/totalMs*100))+'%';
         document.getElementById('prog-text').textContent = `Fade → ${sc.label}`;
-        await sleep(FRAME_MS);
+        // Sleep แบบ Adaptive — ถ้าวาดภาพช้าไปแล้ว ไม่ต้องรอเพิ่มอีกเต็มๆ (ลด Overshoot ของความยาววิดีโอ)
+        const drawMs = performance.now() - iterStart;
+        await sleep(Math.max(1, FRAME_MS - drawMs));
       }
     }
 
@@ -2015,6 +2238,7 @@ async function exportVideo() {
     const sceneMs    = sc.dur * 1000;
     const sceneStart = performance.now();
     while(performance.now() - sceneStart < sceneMs) {
+      const iterStart = performance.now();
       const sceneProgress = Math.min(1, (performance.now()-sceneStart) / sceneMs);
       if(sc.type==='logo' && logoVid?.duration) {
         logoVid.currentTime = ((performance.now()-sceneStart)/1000) % logoVid.duration;
@@ -2024,7 +2248,8 @@ async function exportVideo() {
       const elapsed = performance.now() - renderStart;
       document.getElementById('prog-fill').style.width = Math.min(100, Math.round(elapsed/totalMs*100))+'%';
       document.getElementById('prog-text').textContent = `${sc.label} — ${Math.round(elapsed/totalMs*100)}%`;
-      await sleep(FRAME_MS);
+      const drawMs = performance.now() - iterStart;
+      await sleep(Math.max(1, FRAME_MS - drawMs));
     }
   }
 
