@@ -324,6 +324,8 @@ canvas{width:100%;max-width:270px;display:block;margin:0 auto;
         </div>
         <div class="fg"><label>+ Padding (วิ)</label>
           <select id="voice-padding">
+            <option value="0">0 วิ</option>
+            <option value="1">1 วิ</option>
             <option value="2">2 วิ</option>
             <option value="3">3 วิ</option>
             <option value="4" selected>4 วิ</option>
@@ -1305,7 +1307,8 @@ function getScenes() {
   const infoEl = document.getElementById('auto-dur-info');
 
   if (mode === 'auto-voice' && voiceDurationSec > 0) {
-    const padding = parseInt(document.getElementById('voice-padding').value) || 4;
+    const paddingRaw = parseInt(document.getElementById('voice-padding').value);
+    const padding    = isNaN(paddingRaw) ? 4 : paddingRaw; // เช็ค NaN แทน || เพราะ 0 เป็นค่าที่ถูกต้อง (ไม่ใช่ Fallback)
     const targetContentDur = voiceDurationSec + padding; // Hook + Products ต้องครอบคลุมความยาวนี้
     const productsTotal    = Math.max(targetContentDur - hookDur, numImgs * 1.5);
     perImgDur = Math.max(1.5, Math.round((productsTotal / numImgs) * 10) / 10);
@@ -2154,6 +2157,155 @@ function normalizeAudioBuffer(buffer, targetPeak) {
   return newBuffer;
 }
 
+// ═══════════════════════════════════════════════════════════════
+// FRAME-BY-FRAME EXPORT ENGINE (ทางเลือก B — รับประกันไม่กระตุก 100%)
+// เดิม: Record แบบ Real-time ด้วย MediaRecorder ต้องแม่นยำทุก 33ms
+//       ถ้ามีงานอื่นแทรก (ffmpeg, Network, GC) Loop จะเพี้ยน → วิดีโอกระตุก
+// ใหม่: วาดทีละเฟรม → เก็บเป็นรูปนิ่ง (ไม่มี Deadline เวลาเลย) → ให้ ffmpeg
+//       ประกอบเป็นวิดีโอ 30fps ทีเดียวตอนจบ — จังหวะเป๊ะ 100% เพราะไม่ต้อง
+//       แข่งกับเวลาจริงอีกต่อไป แลกกับ Export ที่ใช้เวลานานขึ้น
+// ═══════════════════════════════════════════════════════════════
+
+// แปลง AudioBuffer (จาก OfflineAudioContext) → WAV bytes (16-bit PCM)
+function audioBufferToWavBytes(buffer) {
+  const numChannels = buffer.numberOfChannels;
+  const sampleRate  = buffer.sampleRate;
+  const numFrames   = buffer.length;
+  const blockAlign  = numChannels * 2; // 16-bit = 2 bytes/sample
+  const dataSize    = numFrames * blockAlign;
+
+  const arrayBuffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(arrayBuffer);
+
+  const writeStr = (offset, str) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  };
+
+  writeStr(0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, 16, true);
+  writeStr(36, 'data');
+  view.setUint32(40, dataSize, true);
+
+  const channelData = [];
+  for (let ch = 0; ch < numChannels; ch++) channelData.push(buffer.getChannelData(ch));
+
+  let offset = 44;
+  for (let i = 0; i < numFrames; i++) {
+    for (let ch = 0; ch < numChannels; ch++) {
+      const s = Math.max(-1, Math.min(1, channelData[ch][i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+      offset += 2;
+    }
+  }
+
+  return new Uint8Array(arrayBuffer);
+}
+
+// Render เสียงทั้งหมด (พากย์ + BGM + Ducking + Sound FX) แบบ Offline
+// ไม่ต้องแข่งกับเวลาจริงเลย — ได้ผลลัพธ์แม่นยำ 100% เสมอไม่ว่าเครื่องจะช้าแค่ไหน
+async function renderFinalAudioWav(voiceBuffer, bgmBuffer, totalDurationSec, sceneTimings) {
+  if (!voiceBuffer && !bgmBuffer) return null;
+
+  const sampleRate    = 44100;
+  const numChannels    = 2;
+  const totalFrames    = Math.ceil((totalDurationSec + 0.5) * sampleRate); // เผื่อท้าย 0.5 วิ
+  const offlineCtx     = new OfflineAudioContext(numChannels, totalFrames, sampleRate);
+
+  if (voiceBuffer) {
+    const src = offlineCtx.createBufferSource();
+    const g   = offlineCtx.createGain(); g.gain.value = 1.0;
+    src.buffer = voiceBuffer;
+    src.connect(g); g.connect(offlineCtx.destination);
+    src.start(0);
+  }
+
+  if (bgmBuffer) {
+    const bgmVol    = parseFloat(document.getElementById('bgm-vol').value) || 0.35;
+    const duckingOn = document.getElementById('fx-ducking')?.checked;
+    const src = offlineCtx.createBufferSource();
+    const g   = offlineCtx.createGain();
+    src.buffer = bgmBuffer; src.loop = true;
+    src.connect(g); g.connect(offlineCtx.destination);
+
+    if (duckingOn) {
+      const duckedVol = bgmVol * 0.4;
+      const rampSec    = 0.3;
+      g.gain.setValueAtTime(bgmVol, 0);
+      const firstVoiceScene = sceneTimings.find(t => t.sc.type !== 'logo');
+      const outroScene      = sceneTimings.find(t => t.sc.isOutro);
+      if (firstVoiceScene) g.gain.linearRampToValueAtTime(duckedVol, firstVoiceScene.start + rampSec);
+      if (outroScene) {
+        g.gain.setValueAtTime(duckedVol, Math.max(0, outroScene.start - rampSec));
+        g.gain.linearRampToValueAtTime(bgmVol, outroScene.start + rampSec);
+      }
+    } else {
+      g.gain.value = bgmVol;
+    }
+    src.start(0);
+  }
+
+  if (document.getElementById('fx-soundfx')?.checked) {
+    sceneTimings.forEach(t => {
+      if (t.sc.type !== 'product') return;
+      playSynthTing(offlineCtx, offlineCtx.destination, t.start + 0.05);
+    });
+  }
+
+  const rendered = await offlineCtx.startRendering();
+  return audioBufferToWavBytes(rendered);
+}
+
+// หา Scene/Fade ที่ต้องวาด ณ เวลา tSec ใดๆ (ใช้แทน Real-time Loop เดิม)
+function getFrameDrawInfo(tSec, scenes, sceneTimings, fadeSec) {
+  for (let si = 0; si < scenes.length; si++) {
+    const st = sceneTimings[si];
+    const fadeStart = si > 0 ? st.start - fadeSec : st.start;
+    if (tSec >= fadeStart && tSec < st.end) {
+      if (si > 0 && tSec < st.start) {
+        const fadeAlpha = (tSec - fadeStart) / fadeSec;
+        return { type: 'fade', prevIdx: si - 1, curIdx: si, fadeAlpha };
+      }
+      const progress = Math.min(1, Math.max(0, (tSec - st.start) / st.sc.dur));
+      return { type: 'scene', idx: si, progress };
+    }
+  }
+  return { type: 'scene', idx: scenes.length - 1, progress: 1 };
+}
+
+// วาด 1 เฟรมตาม Info ที่คำนวณไว้ แล้ว Capture เป็น JPEG เก็บใน ffmpeg Virtual FS
+async function captureOneFrame(ffmpeg, scenes, info, frameIdx) {
+  if (info.type === 'fade') {
+    const prevSc = scenes[info.prevIdx];
+    const curSc  = scenes[info.curIdx];
+    drawScene(prevSc, 1, 1); // Scene ก่อนหน้าที่สถานะจบ (progress=1)
+    ctx.globalAlpha = info.fadeAlpha;
+    if (curSc.type === 'logo')      drawLogo(1, curSc.isOutro);
+    else if (curSc.type === 'hook') drawHook(1);
+    else drawProduct(curSc.img || null, 1, { progress: 0, sceneDur: curSc.dur, imgIndex: curSc.imgIndex || 0 });
+    ctx.globalAlpha = 1;
+  } else {
+    const sc = scenes[info.idx];
+    if (sc.type === 'logo' && logoVid?.duration) {
+      logoVid.currentTime = (info.progress * sc.dur) % logoVid.duration;
+    }
+    drawScene(sc, 1, info.progress);
+  }
+
+  const blob = await new Promise(res => cv.toBlob(res, 'image/jpeg', 0.88));
+  const buf  = new Uint8Array(await blob.arrayBuffer());
+  const fname = 'frame_' + String(frameIdx).padStart(6, '0') + '.jpg';
+  ffmpeg.FS('writeFile', fname, buf);
+}
+
 async function exportVideo() {
   if(!imgs.length) { toast('⚠️ เพิ่มรูปสินค้าก่อนครับ'); return; }
 
@@ -2245,163 +2397,25 @@ async function exportVideo() {
     } catch(e) { console.warn('BGM decode:', e); }
   }
 
-  // ── Setup Canvas Stream ──
-  // สำคัญ: Capture ตรงจาก `cv` (Canvas ที่มองเห็นอยู่แล้วใน DOM) แทนการสร้าง
-  // Canvas ซ่อนแยกต่างหาก (ec) — Canvas ที่ไม่ได้แปะใน DOM มักถูก Browser
-  // ลดความสำคัญการ Render ให้ (Throttle) เพราะคิดว่าไม่มีใครเห็น ทำให้ captureStream()
-  // จับได้แค่ไม่กี่เฟรม/วิ ไม่ว่า JS จะวาดเร็วแค่ไหนก็ตาม — นี่คือสาเหตุที่วิดีโอกระตุก/ค้าง
-  const vidTrack = cv.captureStream(FPS).getVideoTracks()[0];
-  const allTracks = [vidTrack];
-
-  let audioCtx = null;
-  if(voiceBuffer || bgmBuffer) {
-    audioCtx = new AudioContext();
-    const dest  = audioCtx.createMediaStreamDestination();
-    const startAt = audioCtx.currentTime + 0.05; // เผื่อเวลาตั้งค่าเล็กน้อยก่อนเริ่มจริง
-
-    if(voiceBuffer) {
-      const src = audioCtx.createBufferSource();
-      const g   = audioCtx.createGain(); g.gain.value = 1.0;
-      src.buffer = voiceBuffer;
-      src.connect(g); g.connect(dest);
-      src.start(startAt);
-    }
-
-    if(bgmBuffer) {
-      const bgmVol   = parseFloat(document.getElementById('bgm-vol').value) || 0.35;
-      const duckingOn = document.getElementById('fx-ducking')?.checked;
-      const src = audioCtx.createBufferSource();
-      const g   = audioCtx.createGain();
-      src.buffer = bgmBuffer; src.loop = true;
-      src.connect(g); g.connect(dest);
-
-      if (duckingOn) {
-        // ── Audio Ducking: ดังเต็มตอน Intro/Outro, เบาลงตอนมีเสียงพากย์ ──
-        const duckedVol = bgmVol * 0.4;
-        const rampSec   = 0.3;
-
-        // เริ่มดังเต็มที่ (Intro)
-        g.gain.setValueAtTime(bgmVol, startAt);
-
-        // หา scene แรกที่ไม่ใช่ logo (Hook) และ scene แรกที่เป็น Outro
-        const firstVoiceScene = sceneTimings.find(t => t.sc.type !== 'logo');
-        const outroScene      = sceneTimings.find(t => t.sc.isOutro);
-
-        if (firstVoiceScene) {
-          g.gain.linearRampToValueAtTime(duckedVol, startAt + firstVoiceScene.start + rampSec);
-        }
-        if (outroScene) {
-          g.gain.setValueAtTime(duckedVol, startAt + outroScene.start - rampSec);
-          g.gain.linearRampToValueAtTime(bgmVol, startAt + outroScene.start + rampSec);
-        }
-      } else {
-        g.gain.value = bgmVol;
-      }
-
-      src.start(startAt);
-    }
-
-    // ── Sound FX: เสียง "ติ๊ง" สังเคราะห์เอง ตอนราคาโผล่ (ต้นแต่ละ product scene) ──
-    if (document.getElementById('fx-soundfx')?.checked) {
-      sceneTimings.forEach(t => {
-        if (t.sc.type !== 'product') return;
-        playSynthTing(audioCtx, dest, startAt + t.start + 0.05);
-      });
-    }
-
-    dest.stream.getAudioTracks().forEach(t => allTracks.push(t));
+  // ── Render เสียงทั้งหมดแบบ Offline ก่อน (พากย์ + BGM + Ducking + Sound FX) ──
+  // ไม่ต้องแข่งกับเวลาจริงเลย ได้ผลลัพธ์แม่นยำ 100% เสมอ
+  document.getElementById('prog-text').textContent = 'กำลังเตรียมเสียง...';
+  const totalDurationSec = sceneTimings[sceneTimings.length - 1].end;
+  let audioWavBytes = null;
+  try {
+    audioWavBytes = await renderFinalAudioWav(voiceBuffer, bgmBuffer, totalDurationSec, sceneTimings);
+  } catch(e) {
+    console.warn('Offline audio render failed:', e);
+    toast('⚠️ เตรียมเสียงไม่สำเร็จ — Export แบบไม่มีเสียงแทน');
   }
 
-  // ── Recorder setup ──
-  const mime = MediaRecorder.isTypeSupported('video/mp4;codecs=avc1')
-             ? 'video/mp4;codecs=avc1'
-             : MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-             ? 'video/webm;codecs=vp9'
-             : 'video/webm';
-
-  const stream   = new MediaStream(allTracks);
-  const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8000000 });
-  const chunks   = [];
-  recorder.ondataavailable = e => { if(e.data && e.data.size > 0) chunks.push(e.data); };
-
-  // Pause audio ไว้ก่อน — จะ resume พร้อมกับ recorder.start()
-  if(audioCtx) await audioCtx.suspend();
-
-  recorder.start(100); // timeslice 100ms — data arrive สม่ำเสมอ
-  await sleep(50);
-
-  // Resume audio พร้อมกับ recorder เริ่ม capture
-  if(audioCtx) await audioCtx.resume();
-
-  // ── Render Loop (TIME-BASED — รับประกันความยาวจริงตรงตาม sc.dur) ──
-  // สำคัญ: MediaRecorder จับเวลาจาก wall-clock จริง ไม่ใช่จำนวน frame ที่วาด
-  // ดังนั้นต้องรอเวลาจริงให้ครบตามที่ตั้งไว้ ไม่ใช่แค่นับ frame แล้ว sleep สั้นๆ
-  // (ไม่ต้องมี pushFrame() อีกต่อไป — วาดลง cv ตรงๆ ก็ถูก captureStream() จับอยู่แล้ว)
-
-  const renderStart = performance.now();
-
-  for(let si=0; si<scenes.length; si++) {
-    const sc = scenes[si];
-
-    // ── Fade IN (เวลาจริง FADE_MS) ──
-    if(si > 0) {
-      const fadeStart = performance.now();
-      while(performance.now() - fadeStart < FADE_MS) {
-        const iterStart = performance.now();
-        const alpha = (performance.now() - fadeStart) / FADE_MS;
-        drawScene(scenes[si-1], 1-alpha, 1); // scene ก่อนหน้าอยู่ท้าย scene แล้ว (progress≈1)
-        ctx.globalAlpha = alpha;
-        if(sc.type==='logo')      drawLogo(1, sc.isOutro);
-        else if(sc.type==='hook') drawHook(1);
-        else drawProduct(sc.img||null, 1, { progress: 0, sceneDur: sc.dur, imgIndex: sc.imgIndex||0 });
-        ctx.globalAlpha = 1;
-        const elapsed = performance.now() - renderStart;
-        document.getElementById('prog-fill').style.width = Math.min(100, Math.round(elapsed/totalMs*100))+'%';
-        document.getElementById('prog-text').textContent = `Fade → ${sc.label}`;
-        // Sleep แบบ Adaptive — ถ้าวาดภาพช้าไปแล้ว ไม่ต้องรอเพิ่มอีกเต็มๆ (ลด Overshoot ของความยาววิดีโอ)
-        const drawMs = performance.now() - iterStart;
-        await sleep(Math.max(1, FRAME_MS - drawMs));
-      }
-    }
-
-    // ── Main scene (เวลาจริง sc.dur วินาที) ──
-    const sceneMs    = sc.dur * 1000;
-    const sceneStart = performance.now();
-    while(performance.now() - sceneStart < sceneMs) {
-      const iterStart = performance.now();
-      const sceneProgress = Math.min(1, (performance.now()-sceneStart) / sceneMs);
-      if(sc.type==='logo' && logoVid?.duration) {
-        logoVid.currentTime = ((performance.now()-sceneStart)/1000) % logoVid.duration;
-      }
-      drawScene(sc, 1, sceneProgress);
-      const elapsed = performance.now() - renderStart;
-      document.getElementById('prog-fill').style.width = Math.min(100, Math.round(elapsed/totalMs*100))+'%';
-      document.getElementById('prog-text').textContent = `${sc.label} — ${Math.round(elapsed/totalMs*100)}%`;
-      const drawMs = performance.now() - iterStart;
-      await sleep(Math.max(1, FRAME_MS - drawMs));
-    }
-  }
-
-  // ── Stop ──
-  document.getElementById('prog-text').textContent = 'กำลัง Finalize...';
-  await sleep(300);
-
-  await new Promise(res => {
-    const t = setTimeout(res, 8000); // timeout 8 วิ
-    recorder.onstop = () => { clearTimeout(t); res(); };
-    recorder.stop();
-  });
-
-  await sleep(200);
-
-  if(audioCtx) audioCtx.close().catch(() => {});
-
-  // ── Build Raw Blob จาก MediaRecorder ──
-  const ext  = mime.includes('mp4') ? 'mp4' : 'webm';
-  const rawBlob = new Blob(chunks, { type: mime });
-
-  if(!rawBlob.size) {
-    toast('❌ Export ล้มเหลว — ลองใหม่อีกครั้งครับ');
+  // ── โหลด ffmpeg.wasm ก่อนเริ่ม Render เฟรม (Instance เดียวใช้ตลอด Export นี้) ──
+  document.getElementById('prog-text').textContent = '🔧 กำลังโหลด Engine... (ครั้งแรกอาจใช้เวลา 10-30 วิ)';
+  let ffmpeg;
+  try {
+    ffmpeg = await getFFmpeg();
+  } catch(e) {
+    toast('❌ โหลด ffmpeg.wasm ไม่สำเร็จ: ' + e.message);
     btn.disabled=false; btn.textContent='🎬 Export MP4';
     cv.style.cssText = prevCanvasStyle;
     if (canvasWrapEl) canvasWrapEl.style.cssText = prevWrapStyle;
@@ -2409,27 +2423,69 @@ async function exportVideo() {
     return;
   }
 
-  // ── Remux ด้วย ffmpeg.wasm ให้ Seek ได้ ──
-  // MediaRecorder สร้างไฟล์แบบ "live stream" ไม่มี seek table (moov atom) ที่ถูกต้อง
-  // ทำให้เลื่อนวิดีโอไปมาไม่ได้ในหลาย Player (รวม Shopee App)
-  // แก้โดย Remux + Re-encode ผ่าน ffmpeg.wasm — H.264 High Profile + AAC ตามมาตรฐาน Shopee Video
-  document.getElementById('prog-text').textContent = '🔧 กำลังโหลด Engine แก้ไฟล์... (ครั้งแรกอาจใช้เวลา 10-30 วิ)';
+  // ── Render ทีละเฟรม → Capture เป็นรูปนิ่ง (ไม่มี Deadline เวลาเลย) ──
+  // นี่คือหัวใจของทางเลือก B: วาดเสร็จเมื่อไหร่ก็ได้ ไม่ต้องแข่งกับเวลาจริง
+  // จังหวะวิดีโอสุดท้ายจะเป๊ะ 100% เพราะ ffmpeg ประกอบจากจำนวนเฟรมที่แน่นอน
+  const totalFrameCount = Math.round(totalDurationSec * FPS);
+
+  for (let frameIdx = 0; frameIdx < totalFrameCount; frameIdx++) {
+    const tSec = frameIdx / FPS;
+    const info = getFrameDrawInfo(tSec, scenes, sceneTimings, FADE_SEC);
+    await captureOneFrame(ffmpeg, scenes, info, frameIdx);
+
+    const pct = Math.round((frameIdx / totalFrameCount) * 100);
+    document.getElementById('prog-fill').style.width = pct + '%';
+    document.getElementById('prog-text').textContent = `กำลัง Render เฟรม ${frameIdx+1}/${totalFrameCount} (${pct}%)`;
+
+    // Yield ให้ Browser หายใจเป็นระยะ กัน Tab ค้างทั้งหมดระหว่าง Render เฟรมยาวๆ
+    if (frameIdx % 15 === 0) await sleep(0);
+  }
+
+  // ── ประกอบเฟรมทั้งหมด + เสียง ให้เป็นวิดีโอด้วย ffmpeg (ครั้งเดียวจบ) ──
+  document.getElementById('prog-text').textContent = '🎬 กำลังประกอบวิดีโอ + แปลงเสียง (อาจใช้เวลาสักครู่)...';
   document.getElementById('prog-fill').style.width  = '100%';
+
+  if (audioWavBytes) {
+    ffmpeg.FS('writeFile', 'audio.wav', audioWavBytes);
+  }
+
+  const ffmpegArgs = ['-framerate', String(FPS), '-i', 'frame_%06d.jpg'];
+  if (audioWavBytes) ffmpegArgs.push('-i', 'audio.wav');
+  ffmpegArgs.push(
+    '-c:v', 'libx264', '-profile:v', 'high', '-level:v', '4.0',
+    '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p'
+  );
+  if (audioWavBytes) ffmpegArgs.push('-c:a', 'aac', '-b:a', '128k', '-shortest');
+  ffmpegArgs.push('-movflags', '+faststart', 'output.mp4');
 
   let remuxOk = false;
   try {
-    console.log('[Remux] เริ่มโหลด ffmpeg.wasm...');
-    exportedBlob = await remuxForSeekable(rawBlob, ext);
+    console.log('[Assemble] เริ่มประกอบวิดีโอจาก', totalFrameCount, 'เฟรม...');
+    await ffmpeg.run(...ffmpegArgs);
+    const data = ffmpeg.FS('readFile', 'output.mp4');
+    exportedBlob = new Blob([data.buffer], { type: 'video/mp4' });
     remuxOk = true;
-    console.log('[Remux] ✅ สำเร็จ — ขนาดไฟล์ใหม่:', (exportedBlob.size/1024/1024).toFixed(2), 'MB');
+    console.log('[Assemble] ✅ สำเร็จ — ขนาดไฟล์:', (exportedBlob.size/1024/1024).toFixed(2), 'MB');
   } catch(e) {
-    console.error('[Remux] ❌ ล้มเหลว:', e);
-    exportedBlob = rawBlob; // Fallback — ยังเล่นได้ปกติ แต่ seek อาจไม่ลื่น
-    setExportStatus('err',
-      '⚠️ แก้ไฟล์ให้ Seek ได้ไม่สำเร็จ: ' + (e?.message || String(e)) +
-      '<br>ใช้ไฟล์ต้นฉบับแทน (อาจเลื่อนวิดีโอไม่ได้เต็มที่) — เปิด Console (F12) ดู [Remux] log เพื่อ debug เพิ่มเติมครับ'
-    );
-    toast('⚠️ แก้ไฟล์ไม่สำเร็จ — ดูรายละเอียดใต้ปุ่ม Export');
+    console.error('[Assemble] ❌ ล้มเหลว:', e);
+    toast('❌ ประกอบวิดีโอไม่สำเร็จ: ' + e.message + ' — ลองใหม่อีกครั้งครับ');
+    btn.disabled=false; btn.textContent='🎬 Export MP4';
+    cv.style.cssText = prevCanvasStyle;
+    if (canvasWrapEl) canvasWrapEl.style.cssText = prevWrapStyle;
+    if (wasPreviewPlaying) resumePreviewLoop();
+    return;
+  } finally {
+    // เคลียร์ไฟล์เฟรมทั้งหมดออกจาก ffmpeg Virtual FS — สำคัญมากตอนรัน Batch
+    // เพราะแต่ละคลิปมีไฟล์เฟรมเป็นร้อยๆ ไฟล์ ถ้าไม่เคลียร์ Memory จะเต็มเร็วมาก
+    for (let i = 0; i < totalFrameCount; i++) {
+      try { ffmpeg.FS('unlink', 'frame_' + String(i).padStart(6,'0') + '.jpg'); } catch(e) {}
+    }
+    try { if (audioWavBytes) ffmpeg.FS('unlink', 'audio.wav'); } catch(e) {}
+    try { ffmpeg.FS('unlink', 'output.mp4'); } catch(e) {}
+  }
+
+  if (remuxOk) {
+    setExportStatus('ok', '✅ Render แบบทีละเฟรมสำเร็จ — จังหวะภาพเป๊ะ 100% ไม่มีกระตุกแน่นอน');
   }
 
   // เคลียร์ Blob URL ของวิดีโอ Export รอบก่อนหน้า — สำคัญมากตอนรัน Batch
@@ -2447,10 +2503,6 @@ async function exportVideo() {
   document.getElementById('prog-text').textContent         = '✅ Export เสร็จแล้ว!';
   document.getElementById('btn-upload-drive').disabled     = false;
 
-  if (remuxOk) {
-    setExportStatus('ok', '✅ แก้ไฟล์ให้ Seek ได้เรียบร้อยแล้ว — เลื่อนวิดีโอได้ปกติทุก Player');
-  }
-
   const player = document.getElementById('export-player');
   player.src   = url;
   player.style.display = 'block';
@@ -2458,8 +2510,8 @@ async function exportVideo() {
 
   btn.disabled=false; btn.textContent='🎬 Export MP4';
   toast(remuxOk
-    ? `✅ Export เสร็จ! (${(exportedBlob.size/1024/1024).toFixed(1)} MB) — เลื่อนวิดีโอได้ปกติแล้ว`
-    : `⚠️ Export เสร็จ แต่ไฟล์อาจ seek ไม่ได้เต็มที่ (${(exportedBlob.size/1024/1024).toFixed(1)} MB)`
+    ? `✅ Export เสร็จ! (${(exportedBlob.size/1024/1024).toFixed(1)} MB) — Render ทีละเฟรม จังหวะเป๊ะ 100%`
+    : `⚠️ Export มีปัญหาบางส่วน (${(exportedBlob.size/1024/1024).toFixed(1)} MB)`
   );
 
   // คืนขนาด Canvas กลับเป็นเดิมหลัง Export เสร็จ
@@ -2492,6 +2544,11 @@ async function uploadToDrive() {
   if (result.success) {
     setUploadStatus('ok', '✅ Upload สำเร็จ!' + (result.driveUrl ? ' <a href="'+result.driveUrl+'" target="_blank" style="color:var(--pn)">เปิดใน Drive</a>' : ''));
     toast('✅ Upload Drive สำเร็จ!');
+
+    // ดึงรายการสินค้าคงเหลือใหม่ — สินค้าตัวนี้จะหายจาก "รอทำ" เพราะ videoStatus = done แล้ว
+    if (document.getElementById('product-list').style.display !== 'none') {
+      loadProducts();
+    }
   } else {
     setUploadStatus('warn',
       '⚠️ Auto-upload ไม่สำเร็จ (' + result.error + ')<br>' +
@@ -2595,6 +2652,42 @@ function updateTemplateBatchLog(name, type, msg) {
   else addTemplateBatchLog(name, type, msg);
 }
 
+// ═══════════════════════════════════════
+// SCREEN WAKE LOCK — กันจอ/เครื่อง Sleep อัตโนมัติระหว่าง Batch ทำงาน
+// ป้องกัน net::ERR_NETWORK_IO_SUSPENDED ที่เกิดจากเครื่อง Sleep กลางคัน
+// ═══════════════════════════════════════
+let currentWakeLock = null;
+
+async function acquireWakeLock() {
+  if (!('wakeLock' in navigator)) {
+    console.warn('[WakeLock] Browser นี้ไม่รองรับ Wake Lock API');
+    return null;
+  }
+  try {
+    const lock = await navigator.wakeLock.request('screen');
+    console.log('[WakeLock] ✅ ได้ Lock แล้ว — กันจอ/เครื่อง Sleep ระหว่าง Batch');
+    lock.addEventListener('release', () => {
+      console.log('[WakeLock] Lock ถูกปล่อย (Browser อาจจัดการเองตอนสลับแท็บ)');
+    });
+    return lock;
+  } catch (e) {
+    console.warn('[WakeLock] ขอ Lock ไม่สำเร็จ:', e.message);
+    return null;
+  }
+}
+
+function releaseWakeLockSafe(lock) {
+  if (lock) lock.release().catch(() => {});
+}
+
+// Browser จะปล่อย Wake Lock อัตโนมัติเมื่อ Tab ถูกซ่อน (สลับแท็บ/Minimize)
+// พอกลับมาที่ Tab นี้ระหว่าง Batch ยังทำงานอยู่ ให้ขอ Lock ใหม่ทันที
+document.addEventListener('visibilitychange', async () => {
+  if (templateBatchRunning && document.visibilityState === 'visible' && !currentWakeLock) {
+    currentWakeLock = await acquireWakeLock();
+  }
+});
+
 async function runTemplateBatch() {
   const rows = getTemplateBatchSelectedRows();
   if (!rows.length) { toast('⚠️ เลือกอย่างน้อย 1 รายการก่อนครับ'); return; }
@@ -2615,10 +2708,19 @@ async function runTemplateBatch() {
   templateBatchRunning = true;
   templateBatchStopRequested = false;
 
+  // ขอ Wake Lock ป้องกันจอ/เครื่อง Sleep ระหว่าง Batch ทำงาน (ป้องกัน Network หลุด)
+  currentWakeLock = await acquireWakeLock();
+
   document.getElementById('batch-controls').style.display = 'none';
   document.getElementById('batch-progress').style.display = 'block';
   document.getElementById('batch-summary').style.display  = 'none';
   document.getElementById('batch-item-log').innerHTML     = '';
+
+  if (currentWakeLock) {
+    addTemplateBatchLog('🔒 ระบบ', 'ok', 'เปิด Wake Lock แล้ว — จอ/เครื่องจะไม่ Sleep ระหว่าง Batch ทำงาน');
+  } else {
+    addTemplateBatchLog('⚠️ ระบบ', 'warn', 'Wake Lock ไม่รองรับ/ไม่สำเร็จ — แนะนำปิดการตั้งค่า Sleep อัตโนมัติของเครื่องเองระหว่างรอ Batch');
+  }
 
   document.getElementById('btn-load-products').disabled = true;
 
@@ -2702,7 +2804,18 @@ async function runTemplateBatch() {
   templateBatchRunning = false;
   document.getElementById('btn-load-products').disabled = false;
 
+  // ปล่อย Wake Lock — Batch จบแล้ว ปล่อยให้จอ/เครื่อง Sleep ได้ตามปกติ
+  releaseWakeLockSafe(currentWakeLock);
+  currentWakeLock = null;
+
   showTemplateBatchSummary(results, templateBatchStopRequested);
+
+  // ดึงรายการสินค้าคงเหลือใหม่หลัง Batch จบ — รายการที่สำเร็จจะหายไปจาก "รอทำ"
+  // เพราะ videoStatus = done แล้ว (Refresh ครั้งเดียวตอนจบ ไม่ทำทุกรายการ กันยิง
+  // Apps Script ถี่เกินไประหว่าง Batch)
+  if (results.success.length > 0) {
+    await loadProducts();
+  }
 }
 
 function showTemplateBatchSummary(results, wasStopped) {
