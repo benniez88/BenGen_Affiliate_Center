@@ -352,14 +352,14 @@ canvas{width:100%;max-width:270px;display:block;margin:0 auto;
     <div class="card-title">✨ Effects (เปิด/ปิดได้อิสระ)</div>
 
     <div class="fx-toggle">
-      <input type="checkbox" id="fx-sparkle">
+      <input type="checkbox" id="fx-sparkle" checked>
       <div><label>✨ Sparkle Overlay</label>
         <div class="fx-desc">ประกายดาวเล็กๆ ลอยผ่านตอนโชว์ราคา เพิ่มลูกเล่นให้ดูมีชีวิตชีวาขึ้นอีก</div>
       </div>
     </div>
 
     <div class="fx-toggle">
-      <input type="checkbox" id="fx-product-intro">
+      <input type="checkbox" id="fx-product-intro" checked>
       <div><label>🖼️ Product Intro (โชว์รูปสินค้าแทน Avatar)</label>
         <div class="fx-desc">Intro เปลี่ยนจาก Avatar หมุนๆ เป็นรูปสินค้าเต็มจอ + ชื่อสินค้าตัวใหญ่ขอบดำ สไตล์ Feed รีวิว</div>
       </div>
@@ -380,14 +380,14 @@ canvas{width:100%;max-width:270px;display:block;margin:0 auto;
     </div>
 
     <div class="fx-toggle">
-      <input type="checkbox" id="fx-vibrant" checked>
+      <input type="checkbox" id="fx-vibrant">
       <div><label>✨ Vibrant Look (สว่างสดใสขึ้น)</label>
         <div class="fx-desc">เพิ่มความสว่าง + ความอิ่มสีของรูปสินค้าเบาๆ ให้ดูสดใสมีชีวิตชีวา ไม่มืดทึบ</div>
       </div>
     </div>
 
     <div class="fx-toggle">
-      <input type="checkbox" id="fx-vignette" checked>
+      <input type="checkbox" id="fx-vignette">
       <div><label>🌑 Vignette</label>
         <div class="fx-desc">ขอบมืดรอบภาพเบาๆ ให้ดูเป็นซีนีมาติกขึ้น ไม่รบกวนสายตา</div>
       </div>
@@ -424,9 +424,15 @@ canvas{width:100%;max-width:270px;display:block;margin:0 auto;
 
   <!-- Drive Upload -->
   <div class="card">
-    <div class="card-title">☁️ Apps Script URL</div>
-    <div class="fg"><label>Apps Script URL</label>
-      <input type="text" id="apps-script-url" placeholder="https://script.google.com/macros/s/...">
+    <div class="card-title">☁️ Backend URL</div>
+    <div class="fg"><label>Backend URL (Cloudflare Worker — อ่านรูป/เสียง/สินค้า)</label>
+      <input type="text" id="apps-script-url" placeholder="https://your-worker.workers.dev">
+    </div>
+    <div class="fg mt6"><label>Apps Script URL (เฉพาะ Upload วิดีโอ — Hybrid Model)</label>
+      <input type="text" id="apps-script-upload-url" placeholder="https://script.google.com/macros/s/...">
+      <div style="font-size:10px;color:var(--text3);margin-top:3px;">
+        💡 Service Account ไม่มี Storage Quota Upload วิดีโอเองไม่ได้ — ใช้ Apps Script เดิมเฉพาะตอน Upload
+      </div>
     </div>
     <div class="fg mt6"><label>Product ID</label>
       <input type="text" id="product-id" placeholder="fill อัตโนมัติเมื่อเลือกสินค้า">
@@ -923,7 +929,7 @@ async function loadVoiceFromDrive() {
     document.getElementById('voice-status').textContent = '✅ โหลดเสียงจาก Drive แล้ว';
     document.getElementById('voice-status').className   = 'status ok';
 
-    const dur = await measureAudioDuration(voiceUrl);
+    const dur = await measureAudioDurationWithRetry(voiceUrl);
     updateVoiceDurationDisplay(dur);
 
     setLoadStatus('ok', `✅ โหลดเสียงจาก Drive แล้ว (${dur.toFixed(1)} วิ) พร้อม Export`);
@@ -1125,7 +1131,7 @@ document.getElementById('voice-upload').addEventListener('change', async functio
   document.getElementById('voice-status').textContent = '✅ ' + f.name;
   document.getElementById('voice-status').className   = 'status ok';
 
-  const dur = await measureAudioDuration(voiceUrl);
+  const dur = await measureAudioDurationWithRetry(voiceUrl);
   updateVoiceDurationDisplay(dur);
   toast(`✅ โหลด Voiceover แล้ว (${dur.toFixed(1)} วิ)`);
 });
@@ -1875,6 +1881,17 @@ function measureAudioDuration(url) {
   });
 }
 
+// วัดความยาวเสียง พร้อม Retry อัตโนมัติถ้าวัดไม่ได้ (0) — สูงสุด 2 ครั้งรวม
+// ป้องกันกรณีไฟล์เสียงโหลด Metadata ช้า/ไม่ทันในความพยายามแรก
+async function measureAudioDurationWithRetry(url, maxAttempts = 2) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const dur = await measureAudioDuration(url);
+    if (dur > 0) return dur;
+    if (attempt < maxAttempts) await sleep(500); // เว้นจังหวะสั้นๆ ก่อนลองใหม่
+  }
+  return 0; // วัดไม่ได้แม้ Retry ครบแล้ว — ให้ผู้เรียกจัดการ Fallback ต่อ
+}
+
 function updateVoiceDurationDisplay(sec) {
   voiceDurationSec = sec;
   const el = document.getElementById('voice-dur-display');
@@ -1882,6 +1899,17 @@ function updateVoiceDurationDisplay(sec) {
     el.textContent = sec > 0 ? `${sec.toFixed(1)} วินาที` : 'วัดความยาวไม่ได้';
     el.style.color = sec > 0 ? 'var(--green)' : 'var(--red)';
   }
+
+  // ถ้าวัดความยาวเสียงไม่ได้เลย (แม้ Retry แล้ว) และตอนนี้อยู่โหมด "ตามความยาวเสียง"
+  // ให้ Fallback ไปโหมด "กำหนดความยาวรวม 30 วิ" อัตโนมัติ กันวิดีโอคำนวณเวลาผิดเพี้ยน
+  const modeSelect = document.getElementById('duration-mode');
+  if (sec <= 0 && modeSelect && modeSelect.value === 'auto-voice') {
+    modeSelect.value = 'total';
+    document.getElementById('total-duration-input').value = 30;
+    updateDurationModeUI();
+    toast('⚠️ วัดความยาวเสียงไม่ได้ — สลับไปโหมด "กำหนดความยาวรวม 30 วิ" ให้อัตโนมัติแทน');
+  }
+
   buildTimeline();
   redraw();
 }
@@ -2530,8 +2558,10 @@ async function exportVideo() {
 async function uploadToDrive() {
   if(!exportedBlob) { toast('⚠️ Export วิดีโอก่อนครับ'); return; }
 
-  const appsUrl = document.getElementById('apps-script-url').value.trim();
-  if(!appsUrl) { toast('⚠️ ใส่ Apps Script URL ก่อนครับ'); return; }
+  // Upload ต้องใช้ Apps Script เดิม (ไม่ใช่ Worker) — Service Account ไม่มี Storage Quota
+  // อัปโหลดไฟล์เองไม่ได้ (Hybrid Model)
+  const appsUrl = document.getElementById('apps-script-upload-url').value.trim();
+  if(!appsUrl) { toast('⚠️ ใส่ Apps Script URL (สำหรับ Upload) ก่อนครับ'); return; }
 
   const btn = document.getElementById('btn-upload-drive');
   btn.disabled = true; btn.innerHTML = '<span class="spin"></span> กำลัง Upload...';
@@ -2692,8 +2722,9 @@ async function runTemplateBatch() {
   const rows = getTemplateBatchSelectedRows();
   if (!rows.length) { toast('⚠️ เลือกอย่างน้อย 1 รายการก่อนครับ'); return; }
 
-  const appsUrl = document.getElementById('apps-script-url').value.trim();
-  if (!appsUrl) { toast('⚠️ ใส่ Apps Script URL ก่อนครับ'); return; }
+  // Upload ต้องใช้ Apps Script เดิม (ไม่ใช่ Worker) — Hybrid Model
+  const appsUrl = document.getElementById('apps-script-upload-url').value.trim();
+  if (!appsUrl) { toast('⚠️ ใส่ Apps Script URL (สำหรับ Upload) ก่อนครับ'); return; }
 
   const bgmMode = document.getElementById('batch-bgm-mode').value; // none / same / random
 
