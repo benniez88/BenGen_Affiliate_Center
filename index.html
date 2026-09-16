@@ -2604,17 +2604,31 @@ async function uploadVideoBlobToDrive(blob, productId, appsUrl, onProgress) {
 
     if (onProgress) onProgress(`ขนาดไฟล์: ${(blob.size/1024/1024).toFixed(1)} MB — กำลังส่ง...`);
 
-    const resp = await fetch(appsUrl, {
-      method: 'POST',
-      // สำคัญ: ใช้ text/plain แทน application/json เพื่อหลีกเลี่ยง CORS Preflight
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        action:      'uploadVideo',
-        productId,
-        videoBase64: b64,
-        fileName,
-      })
-    });
+    // ป้องกัน Batch ค้างตลอดไปถ้า Apps Script ไม่ตอบกลับ (ปัญหาที่เจอบ่อยกับ Apps Script)
+    // เดิมเป็น fetch() เปล่าๆ ไม่มี Timeout เลย — ถ้า Apps Script แฮงค์ ทั้ง Batch จะค้างสนิท
+    // ไม่ Retry อัตโนมัติที่นี่ (ต่างจากจุดอื่น) เพราะไฟล์วิดีโออาจ Upload สำเร็จไปแล้วจริงๆ
+    // ฝั่ง Apps Script (มันทำงานต่อแม้ Client จะ Timeout ไปแล้ว) — Retry อาจทำให้ได้ไฟล์ซ้ำ 2 ชุด
+    const controller = new AbortController();
+    const timeoutMs  = 90000; // ไฟล์วิดีโอใหญ่ ให้เวลามากกว่าปกติ
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    let resp;
+    try {
+      resp = await fetch(appsUrl, {
+        method: 'POST',
+        // สำคัญ: ใช้ text/plain แทน application/json เพื่อหลีกเลี่ยง CORS Preflight
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({
+          action:      'uploadVideo',
+          productId,
+          videoBase64: b64,
+          fileName,
+        }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
 
     if(!resp.ok) throw new Error('HTTP ' + resp.status);
     const json = await resp.json().catch(() => ({}));
@@ -2623,6 +2637,13 @@ async function uploadVideoBlobToDrive(blob, productId, appsUrl, onProgress) {
     return { success: true, driveUrl: json.driveUrl || json.fileUrl || '' };
 
   } catch(err) {
+    if (err.name === 'AbortError') {
+      return {
+        success: false,
+        error: 'หมดเวลารอ Apps Script ตอบกลับ (90 วิ) — วิดีโออาจ Upload สำเร็จไปแล้วจริงๆ ' +
+          'ลองเช็คใน Drive ก่อนนะครับ ถ้ายังไม่มีค่อยลองใหม่'
+      };
+    }
     return { success: false, error: err.message };
   }
 }
