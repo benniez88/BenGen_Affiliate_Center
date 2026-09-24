@@ -1,0 +1,11 @@
+# ค่าตั้งค่าจริงของเครื่องนี้ (Worker URL, path adb, สวิตช์โพสต์) — ใช้ config.example.yaml เป็นแม่แบบ
+config.yaml
+
+# log ของ Agent + ภาพหน้าจอหลังโพสต์
+logs/
+
+# วิดีโอที่ดาวน์โหลดมาชั่วคราวก่อนส่งเข้ามือถือ
+temp_videos/
+
+__pycache__/
+*.pyc

@@ -1,0 +1,31 @@
+# คัดลอกไฟล์นี้เป็น config.yaml (ชื่อไฟล์ต้องเป็น config.yaml เป๊ะๆ) แล้วกรอกค่าให้ครบ
+# ห้าม commit/แชร์ config.yaml ตัวจริงถ้ามีข้อมูลลับอยู่ในนั้น
+
+# Cloudflare Worker URL เดียวกับที่ตั้งค่าไว้ใน Settings ของเว็บแอป bengen-mobile
+# (ช่อง "Backend URL (Worker)")
+apps_url: "https://your-worker.workers.dev"
+
+# โฟลเดอร์ชั่วคราวบนเครื่อง host สำหรับดาวน์โหลดวิดีโอมาก่อน push เข้าโทรศัพท์
+temp_dir: "./temp_videos"
+
+# เว้นระยะเวลาระหว่างโพสต์แต่ละคลิป (วินาที) — สุ่มในช่วงนี้ทุกครั้ง กันดูเป็นแพทเทิร์นบอท
+min_gap_seconds: 120
+max_gap_seconds: 300
+
+# เปิดสวิตช์ "ครีเอเตอร์เพิ่มป้ายกำกับ AI ไปยังเนื้อหานี้" ทุกโพสต์ (วิดีโอใช้เสียง/สคริปต์ที่ AI สร้าง)
+ai_label: true
+
+# ── Agent (bengen_agent.py) ──
+# โฟลเดอร์ที่มี adb.exe (ว่างได้ถ้า adb อยู่ใน PATH แล้ว)
+adb_dir: ""
+# เวอร์ชันแอป Shopee ที่คาลิเบรตปุ่มไว้ — ถ้ามือถือเป็นเวอร์ชันอื่น Agent จะหยุดโพสต์และเตือน
+calibrated_shopee_version: "3.81.32"
+heartbeat_seconds: 30        # รายงานสถานะเครื่องทุกกี่วินาที
+poll_seconds: 15             # เช็คคำขอ "ตรวจตอนนี้" จากเว็บทุกกี่วินาที
+queue_seconds: 60            # อ่านคิวจากชีต Content ทุกกี่วินาที
+battery_warn_percent: 20
+overdue_max_minutes: 120     # เลยเวลาเกินนี้ไม่โพสต์เอง (ย้ายไปกลุ่ม "เลยเวลา")
+daily_limit: 70              # โพสต์ได้สูงสุดกี่คลิปต่อวัน (นับตามเวลาไทย)
+retry_max: 2                 # พังก่อนกดโพสต์ ลองใหม่ได้กี่ครั้ง
+retry_delay_minutes: 10
+posting_enabled: false       # เฟส 2 — เปิดเมื่อระบบโพสต์แบบกันพลาดเสร็จ
