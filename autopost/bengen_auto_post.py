@@ -280,10 +280,11 @@ def attach_product(d, product_row):
 
     # หลังพิมพ์แคปชั่น แป้นพิมพ์ยังเปิดค้าง — แตะครั้งแรกมักแค่ปิดแป้นพิมพ์ เลยลองซ้ำได้
     # รอข้อความที่มีเฉพาะหน้าเพิ่มสินค้า (หน้าแคปชั่นก็มีหัวข้อ "เพิ่มสินค้า" — ใช้คำนั้นเช็คไม่ได้)
+    # บางครั้งหน้านี้โหลดช้า (เคยพังเพราะรอ 8 วิไม่พอ) — รอรอบละ 20 วิ สูงสุด 4 รอบ
     product_page = d(text="ร้านค้าของฉัน")
-    for _ in range(3):
+    for _ in range(4):
         d(resourceId=f"{PUBLISH_PLUGIN}:id/ll_add_product_symbol").click_exists(timeout=5)  # คาลิเบรตแล้ว: "แตะเพื่อเพิ่มสินค้า"
-        if product_page.wait(timeout=8):
+        if product_page.wait(timeout=20):
             break
     else:
         raise RuntimeError("ไม่เจอหน้า 'เพิ่มสินค้า'")
