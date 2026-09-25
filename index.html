@@ -1474,18 +1474,39 @@ function drawBar() {
 // DRAW — SCENES
 // ═══════════════════════════════════════
 // ── Product Intro Scene: รูปสินค้าเต็มจอ + ชื่อสินค้าตัวใหญ่ขอบดำ (สไตล์ Feed รีวิว) ──
-function drawProductIntroScene() {
-  // ── เลือกรูป Intro ──
-  // 1) ถ้าผู้ใช้ปักรูปไว้ตอนดึงข้อมูลใน Extension (introImageFile) ใช้รูปนั้นก่อนเสมอ
-  // 2) ถ้าไม่ได้ปัก fallback ไปใช้รูป "สุดท้าย" ของเซ็ตแทนรูปแรก — กันซ้ำกับ Product Scene #1
-  //    (ถ้าใช้รูปแรกซ้ำ จะเห็นรูปเดิม 3 รอบติดกันภายใน ~9 วิแรกของคลิป: Intro → Hook → Product#1)
+// ── เลือกรูป Intro ──
+// 1) ถ้าผู้ใช้ปักรูปไว้ตอนดึงข้อมูลใน Extension (introImageFile) ใช้รูปนั้นก่อนเสมอ
+// 2) ถ้าไม่ได้ปัก fallback ไปใช้รูป "สุดท้าย" ของเซ็ตแทนรูปแรก — กันซ้ำกับ Product Scene #1
+//    (ถ้าใช้รูปแรกซ้ำ จะเห็นรูปเดิม 3 รอบติดกันภายใน ~9 วิแรกของคลิป: Intro → Hook → Product#1)
+function getIntroImgIndex() {
   let introImgIndex = imgs.length > 1 ? imgs.length - 1 : 0;
   const pinnedName = selectedProduct?.introImageFile;
   if (pinnedName) {
     const pinnedIdx = imgs.findIndex(im => im._driveName === pinnedName);
     if (pinnedIdx >= 0) introImgIndex = pinnedIdx;
   }
-  const img = imgs[introImgIndex];
+  return introImgIndex;
+}
+
+// ── เลือกรูป Hook: รูป "กลางๆ" ของเซ็ต ──
+// ถ้าชนกับรูป Intro (เช่นปักรูปกลางไว้เป็น Intro) ให้ขยับไปรูปข้างเคียงที่ไม่ใช่ Intro และไม่ใช่รูปแรก (Product #1)
+// ถ้าไม่มีรูปแบบนั้นเหลือ (มีแค่ 2 รูป) ยอมใช้รูปแรกดีกว่าซ้ำกับ Intro ที่อยู่ติดกัน
+function getHookImgIndex() {
+  const mid = imgs.length > 2 ? Math.floor(imgs.length / 2) : (imgs.length > 1 ? 1 : 0);
+  const productIntroOn = document.getElementById('fx-product-intro')?.checked;
+  if (!productIntroOn || imgs.length < 2) return mid;   // Intro เป็น Avatar — ไม่มีทางซ้ำ
+  const introIdx = getIntroImgIndex();
+  if (mid !== introIdx) return mid;
+  for (let d = 1; d < imgs.length; d++) {
+    for (const i of [mid + d, mid - d]) {
+      if (i > 0 && i < imgs.length && i !== introIdx) return i;
+    }
+  }
+  return introIdx === 0 ? 1 : 0;
+}
+
+function drawProductIntroScene() {
+  const img = imgs[getIntroImgIndex()];
 
   // Full-bleed cover-fit image (เหมือน drawProduct)
   const sc = Math.max(W / img.width, (H - BAR_H) / img.height);
@@ -1666,9 +1687,8 @@ function drawHook(alpha) {
 
   if(imgs.length>0){
     // ── กระจายการใช้รูปไม่ให้ซ้ำกับ Intro/Product #1 ──
-    // ใช้รูป "กลางๆ" ของเซ็ต แทนรูปแรกเสมอ ให้ Intro (รูปสุดท้าย) / Hook (รูปกลาง) / Product #1 (รูปแรก) เป็นคนละรูปกัน
-    const hookImgIndex = imgs.length > 2 ? Math.floor(imgs.length / 2) : (imgs.length > 1 ? 1 : 0);
-    const img=imgs[hookImgIndex];
+    // ใช้รูป "กลางๆ" ของเซ็ต แทนรูปแรกเสมอ ให้ Intro (รูปสุดท้าย/รูปที่ปัก) / Hook (รูปกลาง) / Product #1 (รูปแรก) เป็นคนละรูปกัน
+    const img=imgs[getHookImgIndex()];
     ctx.save(); ctx.beginPath(); ctx.rect(0,H*.22,W,H*.52); ctx.clip();
     const sc=Math.max(W/img.width,(H*.52)/img.height);
     ctx.drawImage(img,(W-img.width*sc)/2,H*.22+(H*.52-img.height*sc)/2,img.width*sc,img.height*sc);
