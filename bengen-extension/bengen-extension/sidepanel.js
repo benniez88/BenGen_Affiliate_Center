@@ -9,6 +9,7 @@ let settingsOpen = false;
 let currentTab   = 'product';
 let allImages    = []; // Base64 images ทั้งหมด
 let imgSelected  = []; // เลือก/ไม่เลือก แต่ละรูป (true = จะถูก save)
+let introPinnedIndex = null; // index ใน allImages ของรูปที่ปักเป็น Intro (null = ไม่ได้ปัก ให้ Template เดาเอง)
 let currentProductId = ''; // ได้จาก Apps Script หลัง saveProduct สำเร็จ
 let currentContentId = ''; // ได้จาก Apps Script หลัง saveProduct สำเร็จ (ใช้ update voiceStatus)
 let activeVoiceScript = ''; // บทพากย์ที่จะใช้ Generate เสียงจริง (session หรือจาก Sheets)
@@ -46,6 +47,7 @@ function bindEvents() {
   $('tab-btn-voice').addEventListener('click',   () => switchTab('voice'));
   // Product tab
   $('btn-fetch').addEventListener('click',         fetchProduct);
+  $('btn-auto-fetch').addEventListener('click',    fetchProductFromLink);
   $('btn-generate').addEventListener('click',      generateContent);
   $('btn-save').addEventListener('click',          saveToSheetsAndDrive);
   $('btn-get-link').addEventListener('click',      clickGetLink);
@@ -95,6 +97,7 @@ async function loadSettings() {
   set('s-model-custom',s.modelCustom);
 
   set('s-sheets',      s.sheetsUrl);
+  set('s-upload-url',  s.uploadUrl);
 
   if (s.model === 'custom') $('s-model-custom').style.display = 'block';
 
@@ -115,6 +118,7 @@ async function saveSettings() {
     modelCustom: $('s-model-custom').value.trim(),
 
     sheetsUrl:   $('s-sheets').value.trim(),
+    uploadUrl:   $('s-upload-url').value.trim(),
   };
   await chrome.storage.local.set({ bengen_v2: settings });
   toast('✅ บันทึก Settings แล้ว');
@@ -310,6 +314,9 @@ function batchSelectAll(select) {
 // สร้างเสียง + Upload ให้ 1 รายการ — คืนค่า {success, error, directUrl}
 // ไม่พึ่ง UI state กลาง (activeVoiceScript ฯลฯ) เพื่อให้ Batch เรียกซ้ำได้ปลอดภัย
 async function generateVoiceForRow(row, modelOverride) {
+  // ป้องกัน row เป็น undefined (เช่น Index ไม่ตรงกับ voicePendingRows ที่เปลี่ยนไปแล้ว)
+  if (!row) return { success: false, error: 'ไม่พบข้อมูลรายการนี้ — อาจต้องโหลดรายการใหม่' };
+
   const text = (row.voiceScript || '').trim();
   if (!text) return { success: false, error: 'ไม่มีบทพากย์' };
 
@@ -321,7 +328,9 @@ async function generateVoiceForRow(row, modelOverride) {
     const wavBlob   = pcmToWavBlob(pcmBase64);
     const wavDataUrl = await blobToDataUrl(wavBlob);
 
-    const res = await fetchWithTimeout(settings.sheetsUrl, {
+    // uploadAudio ต้องใช้ Apps Script เดิม (ไม่ใช่ Worker) — Service Account ไม่มี
+    // Storage Quota อัปโหลดไฟล์เองไม่ได้ (Hybrid Model)
+    const res = await fetchWithTimeout(settings.uploadUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -360,6 +369,11 @@ async function runVoiceBatch() {
 
   batchRunning = true;
   batchStopRequested = false;
+
+  // Reset ค่าที่จำไว้จาก Batch รอบก่อนหน้า — ให้โอกาสลองใหม่ทุกครั้งที่กด "เริ่ม Batch"
+  // (เดิมค่านี้ค้างข้ามรอบ Batch ทำให้ถ้าเริ่มใหม่หลัง Batch ก่อนโดน Limit ครบทุก Model
+  // จะข้าม Model ทั้งหมดทันทีโดยไม่ลองจริง แล้ว Crash เพราะไม่มีผลลัพธ์ให้เช็ค)
+  exhaustedModels.clear();
 
   $('batch-controls').style.display  = 'none';
   $('batch-progress').style.display  = 'block';
@@ -426,12 +440,15 @@ async function runVoiceBatch() {
       if (result && !result.success && !result.isRateLimit) break;
     }
 
-    if (result.success) {
+    if (result && result.success) {
       results.success.push(name);
       updateBatchLog(name, 'ok', `✅ สำเร็จ (${usedModel})`);
     } else {
-      results.failed.push({ name, error: result.error });
-      updateBatchLog(name, 'err', '❌ ' + result.error);
+      // result อาจเป็น undefined ได้ถ้า Model ทุกตัวถูกจำว่า "หมด Limit" ไปแล้วตั้งแต่ต้น
+      // (ไม่มีการลองจริงเลยสักครั้งในรอบนี้) — ป้องกันไม่ให้ Crash ตรงนี้
+      const errMsg = result ? result.error : 'Model TTS ทุกตัวติด Limit อยู่แล้วตั้งแต่ก่อนเริ่มรายการนี้';
+      results.failed.push({ name, error: errMsg });
+      updateBatchLog(name, 'err', '❌ ' + errMsg);
 
       // ถ้า Model ทุกตัวที่มีหมดโควต้าหมดแล้ว ไม่มีประโยชน์จะทำรายการถัดไปต่อ — หยุด Batch เลย
       if (TTS_MODELS.every(m => exhaustedModels.has(m))) {
@@ -592,6 +609,7 @@ async function fetchProduct() {
     product   = result;
     allImages = [product.imageUrl, ...(product.extraImages || [])].filter(Boolean);
     imgSelected = allImages.map(() => true);
+    introPinnedIndex = null; // สินค้าใหม่ — เริ่มไม่ได้ปัก ให้ Template เดาเอง
 
     renderProduct(product);
     setRow('fetch-status', 'ok', `✅ ดึงข้อมูลสำเร็จ (${result.source})`);
@@ -604,6 +622,151 @@ async function fetchProduct() {
 
   btn.disabled = false;
   btn.innerHTML = '🔍 ดึงข้อมูลสินค้า';
+}
+
+// ═══════════════════════════════════════
+// AUTO-FETCH: วางลิงก์ → เปิดแท็บเบื้องหลัง → ดึงข้อมูล → ปิดอัตโนมัติ
+// ═══════════════════════════════════════
+async function fetchProductFromLink() {
+  const linkInput = $('auto-link-input');
+  const link = (linkInput.value || '').trim();
+  const btn = $('btn-auto-fetch');
+  const originalHTML = btn.innerHTML;
+
+  if (!link) {
+    setRow('fetch-status', 'err', '❌ วางลิงก์ก่อนครับ');
+    return;
+  }
+  if (!/shopee\.co\.th|shp\.ee/i.test(link)) {
+    setRow('fetch-status', 'err', '❌ ลิงก์นี้ไม่ใช่ลิงก์ Shopee');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> กำลังเปิดหน้า...';
+  setRow('fetch-status', 'info', 'กำลังเปิดลิงก์เบื้องหลัง...');
+
+  let tabId = null;
+  let originalTabId = null;
+  try {
+    // จำแท็บที่เปิดอยู่ตอนนี้ไว้ก่อน เพื่อสลับกลับให้หลังจากดึงข้อมูลเสร็จ
+    const [activeBefore] = await chrome.tabs.query({ active: true, currentWindow: true });
+    originalTabId = activeBefore?.id ?? null;
+
+    // สำคัญ: ต้องเปิดเป็น active:true (ขึ้นหน้าจอจริง) ไม่ใช่แท็บพื้นหลัง —
+    // Shopee ตรวจว่าแท็บ "มองเห็นได้จริง" (Page Visibility) เป็นส่วนหนึ่งของระบบกันบอท
+    // ถ้าเปิดแบบพื้นหลังเงียบๆ ระบบของ Shopee จะไม่ปล่อยข้อมูลสินค้าจริงมาให้ (จะได้แค่ชื่อเว็บทั่วไป)
+    const newTab = await chrome.tabs.create({ url: link, active: true });
+    tabId = newTab.id;
+
+    const tab = await waitForTabReady(tabId, 20000);
+
+    if (!tab?.url?.includes('shopee.co.th')) {
+      throw new Error('ลิงก์นี้ไม่ได้พาไปหน้า Shopee (เปิดไปที่: ' + (tab?.url || 'ไม่ทราบ') + ')');
+    }
+
+    btn.innerHTML = '<span class="spin"></span> กำลังอ่านข้อมูล...';
+    setRow('fetch-status', 'info', 'กำลังอ่านข้อมูลจากหน้า Shopee...');
+
+    const result = await getPageInfoWithRetry(tabId);
+
+    if (!result)      throw new Error('ไม่ได้รับข้อมูล — ลองวางลิงก์ใหม่อีกครั้ง');
+    if (result.error) throw new Error(result.error);
+    if (!result.name || /^Shopee\s*Thailand/i.test(result.name.trim())) {
+      throw new Error('ดึงข้อมูลได้แค่บางส่วน (โดนบล็อกชั่วคราว) — ลองกดดึงอัตโนมัติซ้ำอีกครั้ง หรือเปิดลิงก์เองแล้วกด "🔍 ดึงข้อมูลสินค้า" แทนครับ');
+    }
+
+    result.affiliateLink = link; // เก็บลิงก์ affiliate เดิมที่ผู้ใช้วางไว้ไม่ให้หาย
+
+    product     = result;
+    allImages   = [product.imageUrl, ...(product.extraImages || [])].filter(Boolean);
+    imgSelected = allImages.map(() => true);
+    introPinnedIndex = null;
+
+    renderProduct(product);
+    setRow('fetch-status', 'ok', `✅ ดึงข้อมูลสำเร็จ (${result.source || 'auto'})`);
+    $('btn-generate').style.display = 'flex';
+    $('btn-save').style.display     = 'flex';
+    linkInput.value = '';
+
+  } catch (err) {
+    setRow('fetch-status', 'err', '❌ ' + err.message);
+  } finally {
+    // สลับกลับไปแท็บเดิมก่อน แล้วค่อยปิดแท็บที่เปิดไว้ชั่วคราว ลดอาการหน้าจอกระตุก
+    if (originalTabId !== null) {
+      try { await chrome.tabs.update(originalTabId, { active: true }); } catch { /* แท็บเดิมอาจถูกปิดไปแล้ว */ }
+    }
+    if (tabId !== null) {
+      try { await chrome.tabs.remove(tabId); } catch { /* แท็บอาจถูกปิดไปแล้ว ไม่เป็นไร */ }
+    }
+    btn.disabled = false;
+    btn.innerHTML = originalHTML;
+  }
+}
+
+// ดึงข้อมูลจากแท็บ พร้อม retry 1 ครั้งถ้าได้แค่ชื่อเว็บทั่วไปกลับมา (เคสที่ระบบกันบอท/SPA ยังโหลดไม่เสร็จ)
+async function getPageInfoWithRetry(tabId) {
+  let result = await getPageInfoOnce(tabId);
+  const looksGeneric = result && (!result.name || /^Shopee\s*Thailand/i.test(result.name.trim()));
+  if (looksGeneric && result?.source === 'shopee-dom') {
+    await sleep(1800); // ให้เวลาเพจโหลด/ผ่านการตรวจสอบของ Shopee เพิ่มอีกหน่อย
+    const retryResult = await getPageInfoOnce(tabId);
+    if (retryResult && retryResult.name && !/^Shopee\s*Thailand/i.test(retryResult.name.trim())) {
+      return retryResult;
+    }
+  }
+  return result;
+}
+
+async function getPageInfoOnce(tabId) {
+  let result;
+  try {
+    result = await chrome.tabs.sendMessage(tabId, { action: 'getPageInfo' });
+  } catch {
+    try {
+      await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+      await sleep(900);
+      result = await chrome.tabs.sendMessage(tabId, { action: 'getPageInfo' });
+    } catch (e) {
+      return { error: e.message };
+    }
+  }
+  return result;
+}
+
+// รอจนแท็บโหลดเสร็จจริง (รวมถึง redirect จาก short link เช่น s.shopee.co.th)
+// เช็ค 2 รอบติดกันว่า URL นิ่งแล้ว กัน false-positive ตอนกำลัง redirect หลายชั้น
+function waitForTabReady(tabId, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const start = Date.now();
+    let lastUrl = null;
+
+    const check = async () => {
+      if (Date.now() - start > timeoutMs) {
+        reject(new Error('เปิดหน้าเว็บนานเกินไป — ลองใหม่อีกครั้ง'));
+        return;
+      }
+      let tab;
+      try {
+        tab = await chrome.tabs.get(tabId);
+      } catch {
+        reject(new Error('แท็บถูกปิดไปก่อนดึงข้อมูลเสร็จ'));
+        return;
+      }
+      const url = tab.url || '';
+      const stillResolving = url === '' || url === 'about:blank' || /^https?:\/\/s\.shopee\.co\.th\//i.test(url);
+
+      if (tab.status === 'complete' && !stillResolving && url === lastUrl) {
+        await sleep(400); // เผื่อ SPA render/JS challenge ทำงานต่ออีกนิด
+        resolve(tab);
+        return;
+      }
+      lastUrl = url;
+      setTimeout(check, 300);
+    };
+
+    check();
+  });
 }
 
 function renderProduct(p) {
@@ -624,13 +787,19 @@ function renderProduct(p) {
     gallery.innerHTML = allImages.map((src, i) => `
       <div class="thumb-item" data-i="${i}" style="position:relative;flex-shrink:0;">
         <img src="${src}" data-i="${i}" class="${i===0?'active':''}"
-          style="opacity:${imgSelected[i]===false?'0.3':'1'};"
+          style="opacity:${imgSelected[i]===false?'0.3':'1'};${introPinnedIndex===i?'outline:2px solid #f59e0b;outline-offset:1px;':''}"
           title="${i===0?'รูปหลัก':'คลิกเลือก | Ctrl+คลิก Download'}">
         <button class="thumb-remove" data-i="${i}" title="${imgSelected[i]===false?'กดเพื่อใช้รูปนี้':'กดเพื่อไม่ใช้รูปนี้'}"
           style="position:absolute;top:-4px;right:-4px;width:18px;height:18px;border-radius:50%;
           background:${imgSelected[i]===false?'var(--green)':'var(--red)'};color:#fff;border:none;
           font-size:11px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;
           font-weight:700;">${imgSelected[i]===false?'+':'×'}</button>
+        <button class="thumb-pin-intro" data-i="${i}" title="${introPinnedIndex===i?'ยกเลิกปัก Intro':'ปักรูปนี้เป็น Intro (Video Template)'}"
+          style="position:absolute;bottom:-4px;left:-4px;width:18px;height:18px;border-radius:50%;
+          background:${introPinnedIndex===i?'#f59e0b':'var(--bg3)'};color:${introPinnedIndex===i?'#000':'#fff'};
+          border:1px solid ${introPinnedIndex===i?'#f59e0b':'var(--border)'};
+          font-size:10px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;
+          font-weight:700;">⭐</button>
       </div>`
     ).join('');
 
@@ -648,6 +817,16 @@ function renderProduct(p) {
         e.stopPropagation();
         const i = parseInt(btn.dataset.i);
         imgSelected[i] = !imgSelected[i];
+        renderProduct(product);
+      });
+    });
+
+    // ปักรูปเป็น Intro — คลิกซ้ำเพื่อยกเลิกปัก (กลับไปให้ Template เดาเอง)
+    gallery.querySelectorAll('.thumb-pin-intro').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const i = parseInt(btn.dataset.i);
+        introPinnedIndex = (introPinnedIndex === i) ? null : i;
         renderProduct(product);
       });
     });
@@ -887,13 +1066,23 @@ async function fetchWithTimeout(url, options, timeoutMs = 45000, serviceName = '
 
 async function saveToSheetsAndDrive() {
   if (!product)           { toast('⚠️ ดึงข้อมูลสินค้าก่อนครับ'); return; }
-  if (!settings.sheetsUrl){ toast('⚠️ ตั้งค่า Apps Script URL ใน ⚙️ ก่อน'); return; }
+  if (!settings.uploadUrl){ toast('⚠️ ตั้งค่า Apps Script URL (สำหรับ Upload) ใน ⚙️ ก่อน'); return; }
 
   const btn = $('btn-save');
   btn.disabled = true; btn.innerHTML = '<span class="spin"></span> กำลังบันทึก...';
   setRow('save-status', 'info', 'กำลังส่งข้อมูลขึ้น Sheets + Drive...');
 
   try {
+    // ── หาไฟล์ที่ปักเป็น Intro (ถ้ามี) — ต้องแปลง index ใน allImages (ก่อนกรอง)
+    // เป็นชื่อไฟล์จริงที่จะถูก Apps Script ตั้งชื่อหลัง Upload (product-N.jpg ตามลำดับที่ถูกเลือก)
+    // ใช้ "ชื่อไฟล์" แทน index ตรงๆ เพราะลำดับไฟล์ใน Drive ตอนอ่านกลับมาไม่รับประกันว่าตรงกับลำดับ Upload เป๊ะ
+    const selectedImages = allImages.filter((img, i) => img && imgSelected[i] !== false);
+    let introImageFile = '';
+    if (introPinnedIndex !== null && allImages[introPinnedIndex] && imgSelected[introPinnedIndex] !== false) {
+      const pos = selectedImages.indexOf(allImages[introPinnedIndex]);
+      if (pos >= 0) introImageFile = 'product-' + (pos + 1) + '.jpg';
+    }
+
     const payload = {
       action: 'saveProduct',
       data: {
@@ -913,8 +1102,10 @@ async function saveToSheetsAndDrive() {
         sales:           product.sales,
         description:     product.description || '',
         // รูปภาพ — ส่งเฉพาะรูปที่เลือกไว้ (imgSelected) ให้ Apps Script upload ขึ้น Drive
-        images:          allImages.filter((img, i) => img && imgSelected[i] !== false),
-        imageCount:      allImages.filter((img, i) => img && imgSelected[i] !== false).length,
+        images:          selectedImages,
+        imageCount:      selectedImages.length,
+        // รูปที่ปักเป็น Intro (ชื่อไฟล์ — ว่างถ้าไม่ได้ปัก ให้ Video Template เดาเอง)
+        introImageFile:  introImageFile,
         // Content ที่ Generate แล้ว (ถ้ามี)
         hook:            $('out-hook').value    || '',
         script:          $('out-script').value  || '',
@@ -925,7 +1116,9 @@ async function saveToSheetsAndDrive() {
       }
     };
 
-    const res = await fetchWithTimeout(settings.sheetsUrl, {
+    // saveProduct ต้องใช้ Apps Script เดิม (ไม่ใช่ Worker) — เพราะต้อง Upload รูปขึ้น Drive
+    // Service Account ไม่มี Storage Quota ทำเองไม่ได้ (Hybrid Model)
+    const res = await fetchWithTimeout(settings.uploadUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -958,7 +1151,7 @@ async function generateAndUploadVoice() {
   const text = (activeVoiceScript || '').trim();
   if (!text) { toast('⚠️ ยังไม่มีบทพากย์ — Generate Content หรือโหลดจาก Sheets ก่อนครับ'); return; }
   if (!settings.gemini) { toast('⚠️ ตั้งค่า Gemini API Key ใน ⚙️ ก่อนครับ'); return; }
-  if (!settings.sheetsUrl) { toast('⚠️ ตั้งค่า Apps Script URL ใน ⚙️ ก่อนครับ'); return; }
+  if (!settings.uploadUrl) { toast('⚠️ ตั้งค่า Apps Script URL (สำหรับ Upload) ใน ⚙️ ก่อนครับ'); return; }
   if (!currentProductId) { toast('⚠️ ยังไม่มีสินค้าที่เลือก — บันทึกสินค้าก่อน หรือโหลดจาก Sheets ก่อนครับ'); return; }
 
   const btn = $('btn-generate-voice');
@@ -981,7 +1174,8 @@ async function generateAndUploadVoice() {
     setTTSStatus('info', 'กำลัง Upload ขึ้น Drive...');
     const wavDataUrl = await blobToDataUrl(wavBlob);
 
-    const res = await fetchWithTimeout(settings.sheetsUrl, {
+    // uploadAudio ต้องใช้ Apps Script เดิม (ไม่ใช่ Worker) — Hybrid Model
+    const res = await fetchWithTimeout(settings.uploadUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

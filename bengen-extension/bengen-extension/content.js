@@ -338,18 +338,33 @@
     });
     const allUrls = ogImg ? [ogImg, ...domUrls.filter(u=>u!==ogImg)] : domUrls;
     const images  = await fetchBase64(allUrls.slice(0,8));
-    let sale=0, orig=0;
-    document.querySelectorAll('[class*="price"]').forEach(el => {
-      const n = parsePrice(el.textContent);
-      if (n>0 && n<9999999) { if (!sale||n<sale) sale=n; if (n>orig) orig=n; }
-    });
+
+    // ราคา/ยอดขาย/จำนวนรีวิว — อ่านจากข้อความที่ "เห็นจริง" บนหน้าเว็บแทนการเดา class
+    // (class ของ Shopee เป็น CSS-module/Tailwind แบบสุ่ม เดาไม่ได้และเปลี่ยนบ่อย)
+    const pageText  = document.body.innerText || '';
+    const cleanText = pageText.replace(/\d+\s*x\s*฿[\d,.]+/g, ''); // ตัดราคาผ่อนชำระ (เช่น "24x ฿358.64") ออกก่อน กันปนกับราคาสินค้า
+
+    const priceNums = [...cleanText.matchAll(/฿\s?([\d][\d,]*(?:\.\d+)?)/g)]
+      .map(m => parseFloat(m[1].replace(/,/g, '')))
+      .filter(n => n > 0);
+    const sale = priceNums[0] || 0;
+    const orig = priceNums.find(n => n > sale) || sale;
+
+    const soldMatch = pageText.match(/ขายแล้ว\s*([\d,]+)\s*ชิ้น/)
+                    || pageText.match(/ขายได้\s*([\d,]+)\s*ชิ้น/)
+                    || pageText.match(/([\d,]+)\s*sold/i);
+    const sales = soldMatch ? parseInt(soldMatch[1].replace(/,/g, '')) : 0;
+
+    const reviewMatch = pageText.match(/([\d,]+)\s*รีวิว/) || pageText.match(/([\d,]+)\s*review/i);
+    const ratingCount = reviewMatch ? parseInt(reviewMatch[1].replace(/,/g, '')) : 0;
+
     return {
       mode:'shopee', itemId, shopId, name,
       imageUrl:images[0]||'', extraImages:images.slice(1), imageUrls:allUrls,
       price:orig||sale, sale, discount:(orig>sale&&sale>0)?Math.round((1-sale/orig)*100):0,
       shop:get('[class*="shop-name"]')?.textContent?.trim()||'', shopType:'normal',
       rating:parseFloat(get('[class*="rating"] [class*="score"]')?.textContent)||0,
-      ratingCount:0, sales:0, stock:0,
+      ratingCount, sales, stock:0,
       affiliateLink:'', productUrl:url, source:'shopee-dom'
     };
   }

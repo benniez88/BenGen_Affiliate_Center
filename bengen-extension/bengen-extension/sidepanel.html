@@ -197,8 +197,15 @@ audio{width:100%;height:36px;margin-top:6px;display:none;border-radius:6px;}
   <div class="card">
     <div class="card-title">📊 Google</div>
     <div class="fg">
-      <label>Apps Script URL (Sheets + Drive)</label>
-      <input type="text" id="s-sheets" placeholder="https://script.google.com/macros/s/...">
+      <label>Backend URL (Cloudflare Worker — อ่านข้อมูล/รูป/เสียง)</label>
+      <input type="text" id="s-sheets" placeholder="https://your-worker.workers.dev">
+    </div>
+    <div class="fg mt6">
+      <label>Apps Script URL (เฉพาะ Upload สินค้า/เสียง — Hybrid Model)</label>
+      <input type="text" id="s-upload-url" placeholder="https://script.google.com/macros/s/...">
+      <div style="font-size:10px;color:var(--text3);margin-top:3px;">
+        💡 Service Account ไม่มี Storage Quota อัปโหลดไฟล์เองไม่ได้ — ใช้ Apps Script เดิม (Execute as: Me) เฉพาะตอน Upload เท่านั้น
+      </div>
     </div>
   </div>
 
@@ -227,6 +234,16 @@ audio{width:100%;height:36px;margin-top:6px;display:none;border-radius:6px;}
 
   <!-- Status -->
   <div id="fetch-status" style="display:none;"></div>
+
+  <!-- Auto-fetch from pasted link -->
+  <div class="card" id="link-fetch-card">
+    <div class="card-title">🔗 วางลิงก์ Affiliate → ดึงข้อมูลอัตโนมัติ</div>
+    <div style="display:flex;gap:6px;">
+      <input type="text" id="auto-link-input" placeholder="https://s.shopee.co.th/..." style="flex:1;">
+      <button class="btn btn-primary btn-sm" id="btn-auto-fetch" style="white-space:nowrap;width:auto;padding:0 12px;">⚡ ดึงอัตโนมัติ</button>
+    </div>
+    <div style="font-size:10px;color:var(--text3);margin-top:4px;">วางลิงก์ที่ copy มาจากแอป Shopee ได้เลย ระบบจะเปิดแท็บเบื้องหลัง ดึงข้อมูล แล้วปิดให้อัตโนมัติ</div>
+  </div>
 
   <!-- Empty -->
   <div class="empty" id="empty-state">
