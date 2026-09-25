@@ -793,7 +793,10 @@ async function loadImagesFromDrive() {
     const data = await xhrGet(`${appsUrl}?action=read&sheet=Products`);
     const products = data.rows || [];
 
-    const product = products.find(p => p.id === selectedProduct.productId);
+    const product = products.find(p => String(p.id) === String(selectedProduct.productId));
+    // รูป Intro ที่ปักไว้ใน Extension ถูกบันทึกใน Products sheet ไม่ใช่ Content — ต้องคัดลอกมาใส่ selectedProduct เอง
+    // (selectedProduct มาจาก Content row เลยไม่มีฟิลด์นี้ ทำให้ drawProductIntroScene ไม่เคยเห็นรูปที่ปักไว้)
+    selectedProduct.introImageFile = product?.introImageFile || '';
     let folderId = product?.driveFolderUrl
       ? product.driveFolderUrl.match(/folders\/([^?]+)/)?.[1]
       : null;
