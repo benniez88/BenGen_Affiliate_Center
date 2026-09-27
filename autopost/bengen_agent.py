@@ -20,6 +20,7 @@ BenGen AutoPost Agent
 """
 
 import argparse
+import contextlib
 import json
 import logging
 import logging.handlers
@@ -408,97 +409,113 @@ class Agent:
                 log.info("ข้าม %s — สถานะเปลี่ยนไปแล้ว", cid)
                 return False
 
-            # 3) จองคลิป — ตั้งแต่นี้ถ้า Agent ตาย คลิปจะไปอยู่กลุ่ม "ต้องตรวจสอบ" ไม่โพสต์ซ้ำเอง
-            self.state, self.current_content_id = "posting", cid
-            self.write(cid, "postStartedAt", utc_now_iso())
-            log.info("▶ เริ่มโพสต์ %s (%s)", cid, (row.get("productName") or "")[:40])
-
-            local_path = os.path.join(cfg["temp_dir"], f"{cid}.mp4")
-            remote_path = None
-            d = None
-            submitted = False
-            try:
-                os.makedirs(cfg["temp_dir"], exist_ok=True)
-                bap.download_file(row["mp4DriveUrl"], local_path)
-                d = self.probe.device()
-                d.implicitly_wait(10)
-                remote_path = bap.push_video_to_gallery(d, local_path)
-                bap.open_shopee_video_composer(d)
-                bap.select_video_from_gallery(d, os.path.basename(remote_path))
-                bap.fill_caption(d, caption)
-                product = bap.fetch_product_row(cfg["apps_url"], row.get("productId"))
-                if not product:
-                    raise RuntimeError(f"ไม่พบสินค้า productId={row.get('productId')} ในชีต Products")
-                bap.attach_product(d, product)
-                if cfg.get("ai_label", True):
-                    bap.enable_ai_label(d)
-
-                # 4) กดโพสต์ — จุดที่ย้อนกลับไม่ได้
-                submitted = True
-                bap.finalize_post(d)
-                engage = cfg.get("engage_after_post", False) and not cfg.get("capture_after_post")
-                video_opened = bap.wait_upload_done(d, open_video=engage)
-                log.info("อัปโหลดเสร็จ %s", cid)
-                if cfg.get("capture_after_post"):
-                    self.capture_after_post(d, cid)
-            except Exception as e:
-                msg = f"{type(e).__name__}: {e}"[:300]
-                self.last_error = f"{cid}: {msg}"
-                if submitted:
-                    # หลังกดโพสต์ไม่รู้ว่าขึ้นไปแล้วหรือยัง — ทิ้ง postStartedAt ไว้ = กลุ่ม "ต้องตรวจสอบ"
-                    log.error("✖ %s พังหลังกดโพสต์ — ต้องตรวจสอบในแอป: %s", cid, msg)
-                    self.write(cid, "postError", "พังหลังกดโพสต์ ต้องเช็คในแอปว่าคลิปขึ้นแล้วหรือยัง: " + msg)
-                else:
-                    attempts = int(fresh.get("postAttempts") or 0) + 1
-                    log.error("✖ %s พังก่อนกดโพสต์ (ครั้งที่ %d): %s", cid, attempts, msg)
-                    try:
-                        if d is not None:
-                            bap.recover_app(d)
-                    except Exception as re_err:
-                        log.warning("กู้แอปไม่สำเร็จ: %s", re_err)
-                    self.write(cid, "postAttempts", str(attempts))
-                    self.write(cid, "postError", msg)
-                    self.write(cid, "postStartedAt", "")  # ปลดจอง — ปลอดภัยเพราะยังไม่ได้กดโพสต์
-                    self.last_fail_at[cid] = datetime.now(timezone.utc)
-                return False
-            finally:
-                self.state, self.current_content_id = "idle", ""
-                if remote_path and d is not None and not submitted:
-                    try:
-                        bap.remove_video_from_phone(d, remote_path)
-                    except Exception:
-                        pass
-
-            # 5) สำเร็จ — บันทึก postedAt (ถ้าบันทึกไม่ได้ postStartedAt ยังอยู่ = ต้องตรวจสอบ ไม่โพสต์ซ้ำ)
-            try:
-                for i in range(3):
-                    try:
-                        bap.mark_posted(cfg["apps_url"], cid)
-                        break
-                    except Exception:
-                        if i == 2:
-                            raise
-                        time.sleep(5)
-                self.write(cid, "postError", "")
-            except Exception as e:
-                log.error("✖ %s โพสต์แล้วแต่บันทึก postedAt ไม่สำเร็จ: %s", cid, e)
-                self.last_error = f"{cid}: บันทึก postedAt ไม่สำเร็จ"
+            # ปิดแจ้งเตือนมือถือระหว่างโพสต์ — ป๊อปอัปแจ้งเตือนอาจบังป้าย "อัปโหลดสำเร็จ"/ปุ่มต่างๆ
+            dnd = contextlib.nullcontext()
+            if cfg.get("dnd_while_posting", True):
                 try:
-                    self.write(cid, "postError", "โพสต์ขึ้นแล้ว แต่บันทึกสถานะไม่สำเร็จ — กด 'โพสต์แล้ว' ในเว็บ")
+                    dnd = bap.do_not_disturb(self.probe.device(), cfg.get("dnd_mode", "priority"))
+                except Exception as e:
+                    log.warning("เปิดโหมดห้ามรบกวนไม่ได้: %s", e)
+            with dnd:
+                return self._post_reserved(row, fresh)
+
+    def _post_reserved(self, row, fresh):
+        """ขั้นที่ 3–5 ของ post_item (เรียกตอนถือ self.lock อยู่แล้ว)"""
+        cfg = self.cfg
+        cid = str(row["id"])
+        caption = row.get("caption") or row.get("hook") or ""
+        # 3) จองคลิป — ตั้งแต่นี้ถ้า Agent ตาย คลิปจะไปอยู่กลุ่ม "ต้องตรวจสอบ" ไม่โพสต์ซ้ำเอง
+        self.state, self.current_content_id = "posting", cid
+        self.write(cid, "postStartedAt", utc_now_iso())
+        log.info("▶ เริ่มโพสต์ %s (%s)", cid, (row.get("productName") or "")[:40])
+
+        local_path = os.path.join(cfg["temp_dir"], f"{cid}.mp4")
+        remote_path = None
+        d = None
+        submitted = False
+        try:
+            os.makedirs(cfg["temp_dir"], exist_ok=True)
+            bap.download_file(row["mp4DriveUrl"], local_path)
+            d = self.probe.device()
+            d.implicitly_wait(10)
+            remote_path = bap.push_video_to_gallery(d, local_path)
+            bap.open_shopee_video_composer(d)
+            bap.select_video_from_gallery(d, os.path.basename(remote_path))
+            bap.fill_caption(d, caption)
+            product = bap.fetch_product_row(cfg["apps_url"], row.get("productId"))
+            if not product:
+                raise RuntimeError(f"ไม่พบสินค้า productId={row.get('productId')} ในชีต Products")
+            bap.attach_product(d, product)
+            if cfg.get("ai_label", True):
+                bap.enable_ai_label(d)
+
+            # 4) กดโพสต์ — จุดที่ย้อนกลับไม่ได้
+            submitted = True
+            bap.finalize_post(d)
+            engage = cfg.get("engage_after_post", False) and not cfg.get("capture_after_post")
+            video_opened = bap.wait_upload_done(d, open_video=engage)
+            log.info("อัปโหลดเสร็จ %s", cid)
+            if cfg.get("capture_after_post"):
+                self.capture_after_post(d, cid)
+        except Exception as e:
+            msg = f"{type(e).__name__}: {e}"[:300]
+            self.last_error = f"{cid}: {msg}"
+            if submitted:
+                # หลังกดโพสต์ไม่รู้ว่าขึ้นไปแล้วหรือยัง — ทิ้ง postStartedAt ไว้ = กลุ่ม "ต้องตรวจสอบ"
+                log.error("✖ %s พังหลังกดโพสต์ — ต้องตรวจสอบในแอป: %s", cid, msg)
+                self.write(cid, "postError", "พังหลังกดโพสต์ ต้องเช็คในแอปว่าคลิปขึ้นแล้วหรือยัง: " + msg)
+            else:
+                attempts = int(fresh.get("postAttempts") or 0) + 1
+                log.error("✖ %s พังก่อนกดโพสต์ (ครั้งที่ %d): %s", cid, attempts, msg)
+                try:
+                    if d is not None:
+                        bap.recover_app(d)
+                except Exception as re_err:
+                    log.warning("กู้แอปไม่สำเร็จ: %s", re_err)
+                self.write(cid, "postAttempts", str(attempts))
+                self.write(cid, "postError", msg)
+                self.write(cid, "postStartedAt", "")  # ปลดจอง — ปลอดภัยเพราะยังไม่ได้กดโพสต์
+                self.last_fail_at[cid] = datetime.now(timezone.utc)
+            return False
+        finally:
+            self.state, self.current_content_id = "idle", ""
+            if remote_path and d is not None and not submitted:
+                try:
+                    bap.remove_video_from_phone(d, remote_path)
                 except Exception:
                     pass
-                return True
-            log.info("✔ โพสต์สำเร็จ %s", cid)
-            self.last_error = ""
-            if engage:
-                self.engage_after_post(d, cid, video_opened, local_path, row.get("productName"))
-            time.sleep(15)  # เผื่อเวลาอัปโหลดก่อนลบคลิปต้นฉบับในมือถือ
-            for cleanup in (lambda: bap.remove_video_from_phone(d, remote_path), lambda: os.remove(local_path)):
+
+        # 5) สำเร็จ — บันทึก postedAt (ถ้าบันทึกไม่ได้ postStartedAt ยังอยู่ = ต้องตรวจสอบ ไม่โพสต์ซ้ำ)
+        try:
+            for i in range(3):
                 try:
-                    cleanup()
+                    bap.mark_posted(cfg["apps_url"], cid)
+                    break
                 except Exception:
-                    pass
+                    if i == 2:
+                        raise
+                    time.sleep(5)
+            self.write(cid, "postError", "")
+        except Exception as e:
+            log.error("✖ %s โพสต์แล้วแต่บันทึก postedAt ไม่สำเร็จ: %s", cid, e)
+            self.last_error = f"{cid}: บันทึก postedAt ไม่สำเร็จ"
+            try:
+                self.write(cid, "postError", "โพสต์ขึ้นแล้ว แต่บันทึกสถานะไม่สำเร็จ — กด 'โพสต์แล้ว' ในเว็บ")
+            except Exception:
+                pass
             return True
+        log.info("✔ โพสต์สำเร็จ %s", cid)
+        self.last_error = ""
+        if engage:
+            self.engage_after_post(d, cid, video_opened, local_path, row.get("productName"))
+        time.sleep(15)  # เผื่อเวลาอัปโหลดก่อนลบคลิปต้นฉบับในมือถือ
+        for cleanup in (lambda: bap.remove_video_from_phone(d, remote_path), lambda: os.remove(local_path)):
+            try:
+                cleanup()
+            except Exception:
+                pass
+        return True
+
 
     # ── main loop ──
     def run(self):

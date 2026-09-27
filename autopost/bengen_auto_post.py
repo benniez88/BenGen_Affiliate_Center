@@ -26,6 +26,7 @@ BenGen Auto Post SP
 """
 
 import argparse
+import contextlib
 import os
 import random
 import sys
@@ -158,6 +159,28 @@ def connect_device(serial=None):
     d = u2.connect(serial) if serial else u2.connect()
     d.implicitly_wait(10)
     return d
+
+
+@contextlib.contextmanager
+def do_not_disturb(d, mode="priority"):
+    """เปิดโหมดห้ามรบกวนระหว่างทำงาน แล้วปิดคืนตอนจบ (ทั้งสำเร็จและพัง)
+    mode "priority" = ยังรับสายโทรเข้าได้ตามที่ตั้งไว้ใน "ห้ามรบกวน" ของมือถือ / "on" = ปิดทุกอย่าง
+    ถ้าผู้ใช้เปิดห้ามรบกวนไว้เองอยู่แล้ว (zen_mode ไม่ใช่ 0) จะไม่แตะ และไม่ปิดให้ตอนจบ"""
+    turned_on = False
+    try:
+        if d.shell("settings get global zen_mode").output.strip() == "0":
+            d.shell(["cmd", "notification", "set_dnd", mode])
+            turned_on = True
+    except Exception:
+        pass
+    try:
+        yield
+    finally:
+        if turned_on:
+            try:
+                d.shell(["cmd", "notification", "set_dnd", "off"])
+            except Exception:
+                pass
 
 
 def push_video_to_gallery(d, local_path):
