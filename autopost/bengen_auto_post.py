@@ -286,10 +286,17 @@ def open_shopee_video_composer(d):
 
 def select_video_from_gallery(d, remote_filename_hint):
     """เลือกวิดีโอที่เพิ่ง push เข้าไปจากคลังภาพ แล้วผ่านหน้าตัดต่อไปถึงหน้า 'เพิ่มแคปชั่น'"""
-    d(resourceId=f"{SHOPEE_PACKAGE}:id/ll_gallery_entrance").click()  # คาลิเบรตแล้ว: ปุ่ม "คลังภาพ" หน้ากล้อง
-    time.sleep(2)
+    # หน้าคลังภาพบางครั้งโหลดช้า (เคยพังเพราะหาแท็บ "วิดีโอ" ไม่เจอ) — รอหัวข้อ "คลังภาพ" ถ้าไม่ขึ้นกดปุ่มซ้ำ
+    video_tab = d(description="วิดีโอ", clickable=True)
+    for _ in range(3):
+        d(resourceId=f"{SHOPEE_PACKAGE}:id/ll_gallery_entrance").click_exists(timeout=10)  # คาลิเบรตแล้ว: ปุ่ม "คลังภาพ" หน้ากล้อง
+        if video_tab.wait(timeout=15):
+            break
+    else:
+        raise RuntimeError("กดปุ่มคลังภาพแล้วหน้าคลังภาพไม่ขึ้น")
+    time.sleep(1)
     # กดแท็บ "วิดีโอ" ก่อน กันพลาดไปเลือกรูปภาพที่ใหม่กว่าคลิปที่เพิ่ง push
-    d(description="วิดีโอ", clickable=True).click()  # คาลิเบรตแล้ว
+    video_tab.click()  # คาลิเบรตแล้ว
     time.sleep(1)
     # Shopee ไม่โชว์ชื่อไฟล์ — เลือกช่องแรก (ใหม่สุด) ซึ่งคือคลิปที่เพิ่ง push เข้าไป
     d(resourceId=f"{SHOPEE_PACKAGE}:id/ll_check", instance=0).click()  # คาลิเบรตแล้ว: วงกลมเลือกของช่องแรก
