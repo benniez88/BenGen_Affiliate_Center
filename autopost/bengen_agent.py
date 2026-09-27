@@ -436,7 +436,8 @@ class Agent:
                 # 4) กดโพสต์ — จุดที่ย้อนกลับไม่ได้
                 submitted = True
                 bap.finalize_post(d)
-                bap.wait_upload_done(d)
+                engage = cfg.get("engage_after_post", False) and not cfg.get("capture_after_post")
+                video_opened = bap.wait_upload_done(d, open_video=engage)
                 log.info("อัปโหลดเสร็จ %s", cid)
                 if cfg.get("capture_after_post"):
                     self.capture_after_post(d, cid)
@@ -489,6 +490,8 @@ class Agent:
                 return True
             log.info("✔ โพสต์สำเร็จ %s", cid)
             self.last_error = ""
+            if engage:
+                self.engage_after_post(d, cid, video_opened, local_path)
             time.sleep(15)  # เผื่อเวลาอัปโหลดก่อนลบคลิปต้นฉบับในมือถือ
             for cleanup in (lambda: bap.remove_video_from_phone(d, remote_path), lambda: os.remove(local_path)):
                 try:
@@ -516,6 +519,36 @@ class Agent:
             except Exception as e:
                 log.warning("รอบคิวผิดพลาด: %s", e)
             self.stop.wait(wait)
+
+    def engage_after_post(self, d, cid, video_opened, local_path):
+        """ดูคลิปตัวเอง + หัวใจ + คอมเมนต์ CTA — โพสต์สำเร็จไปแล้ว พังตรงนี้แค่ log ไม่กระทบสถานะคลิป"""
+        if not video_opened:
+            log.info("ข้ามดูคลิป/คอมเมนต์ %s — ไม่ทันกดป้าย 'อัปโหลดสำเร็จ'", cid)
+            return
+        comments = self.cfg.get("cta_comments") or []
+        comment = random.choice(comments) if comments else ""
+        try:
+            bap.engage_own_video(
+                d, comment,
+                video_seconds=bap.mp4_duration_seconds(local_path),
+                watch_seconds=self.cfg.get("engage_watch_seconds", 40),
+            )
+            log.info("ดูคลิป + กดหัวใจ + คอมเมนต์เสร็จ %s", cid)
+        except Exception as e:
+            log.warning("ดูคลิป/คอมเมนต์ %s ไม่สำเร็จ (โพสต์ขึ้นแล้ว): %s", cid, e)
+            out = os.path.join("logs", "engage_fail", cid)
+            try:
+                os.makedirs(out, exist_ok=True)
+                d.screenshot(os.path.join(out, "screen.png"))
+                with open(os.path.join(out, "screen.xml"), "w", encoding="utf-8") as f:
+                    f.write(d.dump_hierarchy())
+                log.info("เก็บภาพจอตอนพังไว้คาลิเบรตที่ %s", out)
+            except Exception:
+                pass
+            try:
+                d.app_stop(bap.SHOPEE_PACKAGE)
+            except Exception:
+                pass
 
     def capture_after_post(self, d, cid):
         """เก็บภาพหน้าจอ + UI hierarchy หลังกดโพสต์ ไว้คาลิเบรตขั้น "รอให้อัปโหลดเสร็จ" (อ่านอย่างเดียว)"""

@@ -187,21 +187,26 @@ def recover_app(d):
     time.sleep(2)
 
 
-def wait_upload_done(d, timeout=600):
+def wait_upload_done(d, timeout=600, open_video=False):
     """หลังกด "โพสต์" แอปกลับไปหน้าฟีด แล้วโชว์แถบ "กำลังอัปโหลด... x%" → "อัปโหลดสำเร็จ" (หายเองในไม่กี่วิ)
     ข้อความพวกนี้ไม่มี resourceId — ใช้ text (คาลิเบรตกับ Shopee 3.81.32: คลิป 6MB อัปโหลดเสร็จใน ~3 วิ)
-    เช็คถี่ๆ ด้วย .exists (ไม่รอ implicit wait) เพราะป้าย "อัปโหลดสำเร็จ" อยู่บนจอแค่ช่วงสั้นๆ"""
+    เช็คถี่ๆ ด้วย .exists (ไม่รอ implicit wait) เพราะป้าย "อัปโหลดสำเร็จ" อยู่บนจอแค่ช่วงสั้นๆ
+    open_video=True: กดป้าย "อัปโหลดสำเร็จ / คลิกที่นี่เพื่อดูวิดีโอ" ทันทีที่เห็น
+    คืน True ถ้ากดป้ายเปิดวิดีโอแล้ว / False ถ้าไม่ได้กด (ป้ายหายไปก่อน หรือไม่ได้ขอให้กด)"""
     start = time.time()
     progress_seen_at = None
     while time.time() - start < timeout:
         if d(text="อัปโหลดสำเร็จ").exists:
-            return
+            if open_video:
+                # TextView บนป้ายไม่ clickable แต่ .click() กดตามพิกัด → ตัวป้ายรับแทน
+                return d(text="คลิกที่นี่เพื่อดูวิดีโอ").click_exists(timeout=1)
+            return False
         if d(textMatches=r".*(อัปโหลดไม่สำเร็จ|อัปโหลดล้มเหลว|โพสต์ไม่สำเร็จ).*").exists:
             raise RuntimeError("Shopee แจ้งว่าอัปโหลดไม่สำเร็จ")
         if d(textStartsWith="กำลังอัปโหลด").exists:
             progress_seen_at = time.time()
         elif progress_seen_at and time.time() - progress_seen_at > 10:
-            return  # แถบอัปโหลดหายไปโดยไม่มี error — ป้ายสำเร็จขึ้นแล้วหายไประหว่างรอบเช็ค
+            return False  # แถบอัปโหลดหายไปโดยไม่มี error — ป้ายสำเร็จขึ้นแล้วหายไประหว่างรอบเช็ค
         elif not progress_seen_at and time.time() - start > 30:
             if d(resourceId=f"{PUBLISH_PLUGIN}:id/btn_post").exists:
                 raise RuntimeError("กดโพสต์แล้วแอปยังค้างอยู่หน้าเพิ่มแคปชั่น")
@@ -338,6 +343,121 @@ def enable_ai_label(d):
     time.sleep(1)
     if not _toggle_is_on(d, toggle):
         raise RuntimeError("กดสวิตช์ป้ายกำกับ AI แล้วยังไม่เปิด")
+
+
+def mp4_duration_seconds(path):
+    """อ่านความยาวคลิปจาก atom 'mvhd' ในไฟล์ mp4 (ไม่ต้องลง ffprobe) — อ่านไม่ได้คืน None"""
+    import struct
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+        i = data.find(b"mvhd")
+        if i < 0:
+            return None
+        version = data[i + 4]
+        if version == 1:
+            timescale, duration = struct.unpack(">IQ", data[i + 24:i + 36])
+        else:
+            timescale, duration = struct.unpack(">II", data[i + 16:i + 24])
+        return duration / timescale if timescale else None
+    except Exception:
+        return None
+
+
+# ── หลังโพสต์: ดูคลิปตัวเอง + กดหัวใจ + คอมเมนต์ CTA ──
+# คาลิเบรตจากหน้าฟีดวิดีโอ + แผงคอมเมนต์ (Shopee 3.81.32) — หน้าคลิปตัวเองใช้ player ตัวเดียวกัน
+# แผงคอมเมนต์เป็น React Native ไม่มี resourceId — ใช้ content-desc
+VIDEO_LIKE_BTN = {"resourceId": "like btn"}
+VIDEO_COMMENT_BTN = {"description": "click video comment_icon"}
+COMMENT_PANEL_CLOSE = {"description": "close the comment panels"}  # ใช้เช็คว่าแผงยังเปิดอยู่
+COMMENT_BAR = {"description": "click to add a comment"}           # แถบ "เพิ่มคอมเมนต์..." (แตะแล้วช่องพิมพ์ถึงโผล่)
+COMMENT_INPUT = {"description": "click to comment now"}           # EditText ตอนแป้นพิมพ์เปิด
+COMMENT_SEND = {"description": "send comment now"}                # ปุ่มส่ง (ห้ามใช้ปุ่ม "ส่ง" ของแป้นพิมพ์)
+COMMENT_LIKE = {"description": "click comment like"}              # หัวใจขวาสุดของแต่ละคอมเมนต์
+
+
+def _video_page_ready(d, timeout=15):
+    return d(**VIDEO_COMMENT_BTN).wait(timeout=timeout)
+
+
+def like_video(d):
+    d(**VIDEO_LIKE_BTN).click()
+    time.sleep(1.5)
+
+
+def post_comment(d, text):
+    """เปิดแผงคอมเมนต์ พิมพ์ข้อความ แล้วส่ง — คืน UiObject ของคอมเมนต์ที่ขึ้นในรายการ"""
+    d(**VIDEO_COMMENT_BTN).click()
+    box = d(**COMMENT_INPUT)
+    # ปกติแผงเปิดมาพร้อมแถบ "เพิ่มคอมเมนต์..." แต่บางครั้งเปิดช่องพิมพ์ให้เลย
+    deadline = time.time() + 10
+    while not box.exists:
+        if time.time() > deadline:
+            raise RuntimeError("กดปุ่มคอมเมนต์แล้วไม่เจอช่องพิมพ์")
+        if d(**COMMENT_BAR).click_exists(timeout=1):
+            box.wait(timeout=5)
+        else:
+            time.sleep(1)
+    box.set_text(text)
+    time.sleep(1)
+    d(**COMMENT_SEND).click()  # ImageView ไม่ clickable แต่กดตามพิกัดได้
+    # คอมเมนต์ใหม่ขึ้นบนสุดของรายการ — เช็คจากข้อความต้นๆ (Shopee อาจตัดข้อความยาว)
+    posted = d(textContains=text[:15])
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        # ข้อความเดียวกันยังค้างในช่องพิมพ์ = ยังไม่ส่ง ต้องเจอ TextView ที่ไม่ใช่ EditText
+        for i in range(posted.count):
+            node = posted[i]
+            if node.info.get("className") != "android.widget.EditText":
+                return node
+        time.sleep(1)
+    raise RuntimeError("กดส่งคอมเมนต์แล้วไม่เห็นคอมเมนต์ขึ้นในรายการ")
+
+
+def like_comment(d, comment_node):
+    """กดหัวใจของคอมเมนต์ตัวเอง — หัวใจอยู่ขวาสุด ระดับเดียวกับชื่อผู้คอมเมนต์ (เหนือข้อความ ~80px)
+    เลือกหัวใจตัวที่อยู่เหนือข้อความคอมเมนต์และใกล้ที่สุด"""
+    top = comment_node.info["bounds"]["top"]
+    best, best_gap = None, None
+    likes = d(**COMMENT_LIKE)
+    for i in range(likes.count):
+        gap = top - likes[i].info["bounds"]["top"]
+        if 0 <= gap <= 200 and (best_gap is None or gap < best_gap):
+            best, best_gap = likes[i], gap
+    if best is None:
+        raise RuntimeError("ไม่เจอปุ่มหัวใจของคอมเมนต์ตัวเอง")
+    best.click()
+    time.sleep(1.5)
+
+
+def close_comment_panel(d):
+    """แตะพื้นที่ว่างด้านบน (ข้างวิดีโอที่ย่ออยู่ เลี่ยงแท็บบนสุด)
+    ถ้าแป้นพิมพ์ยังเปิด แตะแรกแค่ปิดแป้นพิมพ์ — แตะซ้ำจนแผงปิด (แตะเกินจะไปหยุดวิดีโอ เลยเช็คทุกครั้ง)"""
+    for _ in range(3):
+        d.click(0.3, 0.2)
+        time.sleep(1.5)
+        if not d(**COMMENT_PANEL_CLOSE).exists:
+            return
+    raise RuntimeError("แตะพื้นที่ว่างแล้วแผงคอมเมนต์ยังไม่ปิด")
+
+
+def engage_own_video(d, comment_text, video_seconds=None, watch_seconds=40):
+    """ทำต่อจาก wait_upload_done(open_video=True): ดูคลิป ~40 วิ → กดหัวใจ → คอมเมนต์ CTA
+    → กดหัวใจคอมเมนต์ตัวเอง → ปิดแผงคอมเมนต์ ดูจนจบคลิป → ปิดแอป Shopee"""
+    opened_at = time.time()
+    if not _video_page_ready(d):
+        raise RuntimeError("กดป้ายอัปโหลดสำเร็จแล้วไม่เข้าหน้าวิดีโอ")
+    time.sleep(max(0, opened_at + watch_seconds + random.uniform(0, 5) - time.time()))
+    like_video(d)
+    if comment_text:
+        node = post_comment(d, comment_text)
+        like_comment(d, node)
+        close_comment_panel(d)
+    if video_seconds:
+        # ดูให้จบรอบแรก — คลิปวนเล่นเองตอนเปิดแผงคอมเมนต์อยู่ ถ้าเกินความยาวแล้วก็ดูต่อแค่นิดเดียว
+        remaining = video_seconds - (time.time() - opened_at)
+        time.sleep(max(3, remaining + 2))
+    d.app_stop(SHOPEE_PACKAGE)
 
 
 def finalize_post(d, draft=False):
