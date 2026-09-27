@@ -491,7 +491,7 @@ class Agent:
             log.info("✔ โพสต์สำเร็จ %s", cid)
             self.last_error = ""
             if engage:
-                self.engage_after_post(d, cid, video_opened, local_path)
+                self.engage_after_post(d, cid, video_opened, local_path, row.get("productName"))
             time.sleep(15)  # เผื่อเวลาอัปโหลดก่อนลบคลิปต้นฉบับในมือถือ
             for cleanup in (lambda: bap.remove_video_from_phone(d, remote_path), lambda: os.remove(local_path)):
                 try:
@@ -520,14 +520,15 @@ class Agent:
                 log.warning("รอบคิวผิดพลาด: %s", e)
             self.stop.wait(wait)
 
-    def engage_after_post(self, d, cid, video_opened, local_path):
+    def engage_after_post(self, d, cid, video_opened, local_path, product_name):
         """ดูคลิปตัวเอง + หัวใจ + คอมเมนต์ CTA — โพสต์สำเร็จไปแล้ว พังตรงนี้แค่ log ไม่กระทบสถานะคลิป"""
-        if not video_opened:
-            log.info("ข้ามดูคลิป/คอมเมนต์ %s — ไม่ทันกดป้าย 'อัปโหลดสำเร็จ'", cid)
-            return
         comments = self.cfg.get("cta_comments") or []
         comment = random.choice(comments) if comments else ""
         try:
+            if not video_opened:
+                log.info("ไม่ทันกดป้าย 'อัปโหลดสำเร็จ' %s — เปิดคลิปจากหน้าโปรไฟล์แทน", cid)
+                if not bap.open_latest_own_video(d, product_name):
+                    raise RuntimeError("หาคลิปที่เพิ่งโพสต์ในหน้าโปรไฟล์ไม่เจอ")
             bap.engage_own_video(
                 d, comment,
                 video_seconds=bap.mp4_duration_seconds(local_path),

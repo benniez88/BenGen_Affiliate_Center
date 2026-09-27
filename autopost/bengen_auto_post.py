@@ -215,14 +215,8 @@ def wait_upload_done(d, timeout=600, open_video=False):
     raise RuntimeError(f"อัปโหลดนานเกิน {timeout} วิ")
 
 
-def open_shopee_video_composer(d):
-    """เปิดแอป Shopee แล้วไปหน้ากล้อง 'สร้างวิดีโอ' (คาลิเบรตกับ Honor 70 / Shopee 3.81.32)"""
-    d.screen_on()
-    time.sleep(1)
-    if "isKeyguardShowing=true" in d.shell("dumpsys window | grep isKeyguardShowing").output:
-        raise RuntimeError(
-            "จอโทรศัพท์ล็อกอยู่ — ปลดล็อกจอก่อน และแนะนำเปิด 'Stay awake' (ตัวเลือกนักพัฒนา) ให้จอไม่ดับตอนชาร์จ"
-        )
+def goto_video_feed(d):
+    """ปิด-เปิดแอป Shopee ใหม่ แล้วไปหน้าฟีด Live & Video — คืนไอคอน + (สร้างวิดีโอ) มุมขวาบน"""
     d.app_start(SHOPEE_PACKAGE, stop=True)  # ปิดแล้วเปิดใหม่ ให้เริ่มที่หน้าแรก (มีแถบเมนูล่าง) เสมอ
     video_tab = d(description="tab_bar_button_video_and_live")  # คาลิเบรตแล้ว: แท็บ "Live & Video" แถบล่าง
     if not video_tab.wait(timeout=30):  # แอปเปิดใหม่ช้า (splash + โหลดหน้าแรก)
@@ -242,6 +236,27 @@ def open_shopee_video_composer(d):
             time.sleep(3)  # รอฟีดวิดีโอโหลด
         else:
             time.sleep(1)
+    return create_icon
+
+
+def open_shopee_video_composer(d):
+    """เปิดแอป Shopee แล้วไปหน้ากล้อง 'สร้างวิดีโอ' (คาลิเบรตกับ Honor 70 / Shopee 3.81.32)"""
+    d.screen_on()
+    time.sleep(1)
+    if "isKeyguardShowing=true" in d.shell("dumpsys window | grep isKeyguardShowing").output:
+        raise RuntimeError(
+            "จอโทรศัพท์ล็อกอยู่ — ปลดล็อกจอก่อน และแนะนำเปิด 'Stay awake' (ตัวเลือกนักพัฒนา) ให้จอไม่ดับตอนชาร์จ"
+        )
+    create_icon = goto_video_feed(d)
+    # หลังกดโพสต์ แอปกลับมาที่รายการเดิมในฟีด — ถ้าเป็นไลฟ์ แถบ "กำลังอัปโหลด/อัปโหลดสำเร็จ" ไม่ขึ้น
+    # เลยปัดจนเจอคลิปวิดีโอ (มีปุ่มคอมเมนต์) ก่อนกดสร้าง
+    for _ in range(6):
+        if d(**VIDEO_COMMENT_BTN).exists:
+            break
+        d.swipe(0.5, 0.75, 0.5, 0.25, 0.15)
+        time.sleep(2)
+    else:
+        raise RuntimeError("ปัดฟีดหลายรอบแล้วยังไม่เจอคลิปวิดีโอ (เจอแต่ไลฟ์)")
     create_icon.click()
     time.sleep(2)
 
@@ -439,6 +454,44 @@ def close_comment_panel(d):
         if not d(**COMMENT_PANEL_CLOSE).exists:
             return
     raise RuntimeError("แตะพื้นที่ว่างแล้วแผงคอมเมนต์ยังไม่ปิด")
+
+
+def _norm(s):
+    return " ".join(str(s or "").split())
+
+
+def open_latest_own_video(d, product_name, attempts=3):
+    """ทางสำรองเมื่อกดป้าย "อัปโหลดสำเร็จ" ไม่ทัน: ฟีดวิดีโอ → ไอคอนโปรไฟล์มุมซ้ายบน → ตารางคลิป
+    → ช่องแรกที่ไม่ได้ปักหมุด (= คลิปใหม่สุด) แล้วเช็คชื่อสินค้าที่แนบว่าตรงกับคลิปที่เพิ่งโพสต์
+    คลิปอาจยังไม่ขึ้นในโปรไฟล์ทันที เลยลองซ้ำได้ — คืน True ถ้าเปิดคลิปที่ถูกต้องได้"""
+    want = _norm(product_name)[:25]
+    for i in range(attempts):
+        if i:
+            time.sleep(15)
+        goto_video_feed(d)
+        d(description="click me page icon").click()  # คาลิเบรตแล้ว: ไอคอนคนมุมซ้ายบนของฟีด
+        cells = d(descriptionMatches=r"click video \d+")
+        if not cells.wait(timeout=15):
+            continue
+        time.sleep(1)
+        pins = d(text="ปักหมุด")
+        pin_boxes = [pins[j].info["bounds"] for j in range(pins.count)]
+        target = None
+        for j in range(cells.count):
+            b = cells[j].info["bounds"]
+            if not any(b["left"] <= p["left"] <= b["right"] and b["top"] <= p["top"] <= b["bottom"] for p in pin_boxes):
+                target = cells[j]
+                break
+        if target is None:
+            continue
+        target.click()
+        if not _video_page_ready(d):
+            continue
+        anchor = d(description="click video product icon").child(className="android.widget.TextView")
+        names = [_norm(anchor[j].get_text()) for j in range(anchor.count)]
+        if not want or any(want in n for n in names):
+            return True
+    return False
 
 
 def engage_own_video(d, comment_text, video_seconds=None, watch_seconds=40):
