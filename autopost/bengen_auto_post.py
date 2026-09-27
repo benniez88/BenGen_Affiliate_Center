@@ -416,17 +416,14 @@ def post_comment(d, text):
     box.set_text(text)
     time.sleep(1)
     d(**COMMENT_SEND).click()  # ImageView ไม่ clickable แต่กดตามพิกัดได้
-    # คอมเมนต์ใหม่ขึ้นบนสุดของรายการ — เช็คจากข้อความต้นๆ (Shopee อาจตัดข้อความยาว)
-    posted = d(textContains=text[:15])
-    deadline = time.time() + 10
-    while time.time() < deadline:
-        # ข้อความเดียวกันยังค้างในช่องพิมพ์ = ยังไม่ส่ง ต้องเจอ TextView ที่ไม่ใช่ EditText
-        for i in range(posted.count):
-            node = posted[i]
-            if node.info.get("className") != "android.widget.EditText":
-                return node
-        time.sleep(1)
-    raise RuntimeError("กดส่งคอมเมนต์แล้วไม่เห็นคอมเมนต์ขึ้นในรายการ")
+    # คอมเมนต์ใหม่ขึ้นในรายการเป็น TextView (ช่องพิมพ์เป็น EditText — ถูกล้างทันทีหลังส่ง
+    # เลยห้ามไปอ่าน node ของช่องพิมพ์ เคยพังเพราะ node หายระหว่างอ่าน)
+    posted = d(textContains=text[:15], className="android.widget.TextView")
+    if not posted.wait(timeout=10):
+        raise RuntimeError("กดส่งคอมเมนต์แล้วไม่เห็นคอมเมนต์ขึ้นในรายการ")
+    # ป้าย "เขียนคอมเมนต์แล้ว" บังกลางจอแป๊บนึง — รอให้หายก่อนกดอย่างอื่น
+    d(text="เขียนคอมเมนต์แล้ว").wait_gone(timeout=5)
+    return posted
 
 
 def like_comment(d, comment_node):
