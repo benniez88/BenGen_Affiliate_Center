@@ -4,7 +4,7 @@
 โดยควบคุมแอป Shopee บนมือถือ Android จริงผ่าน USB (ADB + uiautomator2, ไม่ต้อง root)
 
 ⚠️ Shopee ไม่มี API ให้อัปโหลดวิดีโอ ระบบนี้จึง "กดแอปแทนคน" — ปุ่มถูกคาลิเบรตไว้กับ
-**Honor 70 (1080×2400) + Shopee 3.81.32** ถ้าแอปอัปเดต Agent จะหยุดโพสต์และเตือนให้คาลิเบรตใหม่
+**Honor 70 (1080×2400) + Shopee 3.82.58** ถ้าแอปอัปเดต Agent จะหยุดโพสต์และเตือนให้คาลิเบรตใหม่
 
 ---
 
@@ -141,7 +141,7 @@ copy config.example.yaml config.yaml
 | `min_gap_seconds` / `max_gap_seconds` | 120 / 300 | เว้นช่วงสุ่มระหว่างคลิป |
 | `ai_label` | true | เปิดสวิตช์ "ครีเอเตอร์เพิ่มป้ายกำกับ AI" ทุกโพสต์ |
 | `adb_dir` | – | โฟลเดอร์ `adb.exe` |
-| `calibrated_shopee_version` | `3.81.32` | เวอร์ชันแอปที่คาลิเบรตไว้ |
+| `calibrated_shopee_version` | `3.82.58` | เวอร์ชันแอปที่คาลิเบรตไว้ |
 | `heartbeat_seconds` | 30 | รายงานสถานะทุกกี่วิ |
 | `poll_seconds` | 15 | เช็คคำสั่งจากเว็บทุกกี่วิ |
 | `queue_seconds` | 60 | อ่านคิว Content ทุกกี่วิ |

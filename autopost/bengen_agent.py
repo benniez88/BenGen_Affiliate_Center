@@ -221,6 +221,7 @@ class Agent:
         self.paused_by_user = True
         self.last_fail_at = {}         # content id → เวลาที่พังล่าสุด (ไว้เว้นช่วงก่อนลองใหม่)
         self.next_post_after = None    # เว้นช่วงแบบสุ่มระหว่างคลิป
+        self.retry_soon = False        # เพิ่งพังก่อนกดโพสต์ — รอบคิวถัดไปไม่ต้องรอ queue_seconds
         self.started_at = utc_now_iso()
         self.stop = threading.Event()
 
@@ -435,16 +436,18 @@ class Agent:
         submitted = False
         try:
             os.makedirs(cfg["temp_dir"], exist_ok=True)
-            bap.download_file(row["mp4DriveUrl"], local_path)
+            if not os.path.exists(local_path):  # โหลดล่วงหน้าไว้แล้วระหว่างเว้นช่วง (prefetch) ก็ใช้ได้เลย
+                bap.download_file(row["mp4DriveUrl"], local_path)
+            # หาสินค้าก่อนแตะมือถือ — ไม่เจอจะได้รู้ก่อนเปิดแอป
+            product = bap.fetch_product_row(cfg["apps_url"], row.get("productId"))
+            if not product:
+                raise RuntimeError(f"ไม่พบสินค้า productId={row.get('productId')} ในชีต Products")
             d = self.probe.device()
             d.implicitly_wait(10)
             remote_path = bap.push_video_to_gallery(d, local_path)
             bap.open_shopee_video_composer(d)
             bap.select_video_from_gallery(d, os.path.basename(remote_path))
             bap.fill_caption(d, caption)
-            product = bap.fetch_product_row(cfg["apps_url"], row.get("productId"))
-            if not product:
-                raise RuntimeError(f"ไม่พบสินค้า productId={row.get('productId')} ในชีต Products")
             bap.attach_product(d, product)
             if cfg.get("ai_label", True):
                 bap.enable_ai_label(d)
@@ -453,7 +456,14 @@ class Agent:
             submitted = True
             bap.finalize_post(d)
             engage = cfg.get("engage_after_post", False) and not cfg.get("capture_after_post")
-            video_opened = bap.wait_upload_done(d, open_video=engage)
+            status = bap.wait_upload_done(d, open_video=engage)
+            if status == bap.UPLOAD_UNSEEN:
+                # ไม่เห็นแถบอัปโหลดเลย (เช่น ฟีดเป็นไลฟ์) — เปิดคลิปใหม่สุดในโปรไฟล์ ถ้าเจอ = ขึ้นแล้วจริง
+                log.info("ไม่เห็นแถบอัปโหลด %s — เช็คคลิปในหน้าโปรไฟล์", cid)
+                if not bap.open_latest_own_video(d, row.get("productName")):
+                    raise RuntimeError("กดโพสต์แล้วไม่เห็นแถบอัปโหลด และไม่เจอคลิปในหน้าโปรไฟล์")
+                status = bap.UPLOAD_OPENED
+            video_opened = status == bap.UPLOAD_OPENED
             log.info("อัปโหลดเสร็จ %s", cid)
             if cfg.get("capture_after_post"):
                 self.capture_after_post(d, cid)
@@ -476,6 +486,7 @@ class Agent:
                 self.write(cid, "postError", msg)
                 self.write(cid, "postStartedAt", "")  # ปลดจอง — ปลอดภัยเพราะยังไม่ได้กดโพสต์
                 self.last_fail_at[cid] = datetime.now(timezone.utc)
+                self.retry_soon = True
             return False
         finally:
             self.state, self.current_content_id = "idle", ""
@@ -508,7 +519,6 @@ class Agent:
         self.last_error = ""
         if engage:
             self.engage_after_post(d, cid, video_opened, local_path, row.get("productName"))
-        time.sleep(15)  # เผื่อเวลาอัปโหลดก่อนลบคลิปต้นฉบับในมือถือ
         for cleanup in (lambda: bap.remove_video_from_phone(d, remote_path), lambda: os.remove(local_path)):
             try:
                 cleanup()
@@ -531,11 +541,34 @@ class Agent:
                 if self.queue.get("missingColumns"):
                     log.warning("Content ยังไม่มีคอลัมน์: %s — ยังไม่โพสต์", self.queue["missingColumns"])
                 elif self.cfg.get("posting_enabled", False) and not self.paused_by_user and due_rows:
-                    if self.maybe_post(due_rows[0]):
-                        wait = 5  # เพิ่งโพสต์ — กลับมาดูคิวเร็วๆ (เว้นช่วงคุมด้วย next_post_after)
+                    if self.maybe_post(due_rows[0]) or self.retry_soon:
+                        # เพิ่งโพสต์ / เพิ่งพังก่อนกดโพสต์ — กลับมาดูคิวเร็วๆ (เว้นช่วงคุมด้วย next_post_after)
+                        wait = 5
+                        self.retry_soon = False
+                    elif self.next_post_after:
+                        # (รอบที่เพิ่งโพสต์ due_rows[0] คือคลิปที่เพิ่งโพสต์ไป — เลยทำแค่รอบถัดไป)
+                        # อยู่ในช่วงเว้นระหว่างคลิป — ใช้เวลานี้โหลดคลิปถัดไปไว้ก่อน แล้วตื่นตรงเวลาที่ครบช่วงเว้น
+                        # (ไม่ต้องรอรอบเช็คคิว queue_seconds)
+                        self.prefetch(due_rows[0])
+                        left = (self.next_post_after - datetime.now(timezone.utc)).total_seconds()
+                        if left > 0:
+                            wait = min(wait, left + 0.5)
             except Exception as e:
                 log.warning("รอบคิวผิดพลาด: %s", e)
             self.stop.wait(wait)
+
+    def prefetch(self, row):
+        """โหลดไฟล์คลิปที่จะโพสต์ถัดไปไว้ก่อน (ไฟล์เดียวกับที่ _post_reserved ใช้) — พลาดก็แค่ไปโหลดตอนโพสต์"""
+        if not row.get("mp4DriveUrl"):
+            return
+        path = os.path.join(self.cfg["temp_dir"], f"{row['id']}.mp4")
+        if os.path.exists(path):
+            return
+        try:
+            os.makedirs(self.cfg["temp_dir"], exist_ok=True)
+            bap.download_file(row["mp4DriveUrl"], path)
+        except Exception as e:
+            log.warning("โหลดคลิปล่วงหน้า %s ไม่สำเร็จ: %s", row.get("id"), e)
 
     def engage_after_post(self, d, cid, video_opened, local_path, product_name):
         """ดูคลิปตัวเอง + หัวใจ + คอมเมนต์ CTA — โพสต์สำเร็จไปแล้ว พังตรงนี้แค่ log ไม่กระทบสถานะคลิป"""
@@ -544,12 +577,12 @@ class Agent:
         try:
             if not video_opened:
                 log.info("ไม่ทันกดป้าย 'อัปโหลดสำเร็จ' %s — เปิดคลิปจากหน้าโปรไฟล์แทน", cid)
-                if not bap.open_latest_own_video(d, product_name):
+                if not bap.open_latest_own_video(d, product_name, restart=True):  # อัปโหลดเสร็จแล้ว ปิด-เปิดแอปได้
                     raise RuntimeError("หาคลิปที่เพิ่งโพสต์ในหน้าโปรไฟล์ไม่เจอ")
             bap.engage_own_video(
                 d, comment,
                 video_seconds=bap.mp4_duration_seconds(local_path),
-                watch_seconds=self.cfg.get("engage_watch_seconds", 40),
+                watch_seconds=self.cfg.get("engage_watch_seconds", 5),
             )
             log.info("ดูคลิป + กดหัวใจ + คอมเมนต์เสร็จ %s", cid)
         except Exception as e:

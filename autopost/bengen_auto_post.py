@@ -99,11 +99,14 @@ def update_status(apps_url, content_id, field, value, sheet="Content"):
 
 
 def download_file(url, dest_path):
+    """โหลดลงไฟล์ .part ก่อนแล้วค่อยเปลี่ยนชื่อ — ไฟล์ปลายทางมีอยู่ = โหลดครบแล้วแน่นอน (ใช้กับ prefetch)"""
     res = requests.get(url, timeout=120, stream=True)
     res.raise_for_status()
-    with open(dest_path, "wb") as f:
+    part = dest_path + ".part"
+    with open(part, "wb") as f:
         for chunk in res.iter_content(chunk_size=1 << 16):
             f.write(chunk)
+    os.replace(part, dest_path)
     return dest_path
 
 
@@ -148,7 +151,7 @@ def pick_due_scheduled_items(rows):
 
 SHOPEE_PACKAGE = "com.shopee.th"  # แพ็กเกจแอป Shopee ประเทศไทย — เช็คให้ตรงเครื่องคุณอีกที
                                    # (เช็คได้ด้วยคำสั่ง: adb shell pm list packages | grep shopee)
-# หน้า "เพิ่มแคปชั่น"/โพสต์ อยู่ใน plugin แยก — resourceId ขึ้นต้นด้วยชื่อนี้แทน (Shopee 3.81.32)
+# หน้า "เพิ่มแคปชั่น"/โพสต์ อยู่ใน plugin แยก — resourceId ขึ้นต้นด้วยชื่อนี้แทน (Shopee 3.81.32, เช็คซ้ำกับ 3.82.58)
 PUBLISH_PLUGIN = "com.shopee.th.dfpluginshopee16"
 CAPTION_MAX_CHARS = 150  # ช่องแคปชั่นโชว์ตัวนับ 0/150
 
@@ -210,60 +213,68 @@ def recover_app(d):
     time.sleep(2)
 
 
-def wait_upload_done(d, timeout=600, open_video=False):
+UPLOAD_OPENED = "opened"  # เห็นป้าย "อัปโหลดสำเร็จ" และกดเข้าดูคลิปแล้ว
+UPLOAD_DONE = "done"      # อัปโหลดเสร็จ แต่ไม่ได้กดป้าย (ป้ายหายไปก่อน หรือไม่ได้ขอให้กด)
+UPLOAD_UNSEEN = "unseen"  # ไม่เห็นแถบอัปโหลดเลย — ยังไม่รู้ว่าขึ้นแล้วไหม ต้องไปเช็คในหน้าโปรไฟล์
+
+
+def wait_upload_done(d, timeout=600, open_video=False, unseen_after=20):
     """หลังกด "โพสต์" แอปกลับไปหน้าฟีด แล้วโชว์แถบ "กำลังอัปโหลด... x%" → "อัปโหลดสำเร็จ" (หายเองในไม่กี่วิ)
-    ข้อความพวกนี้ไม่มี resourceId — ใช้ text (คาลิเบรตกับ Shopee 3.81.32: คลิป 6MB อัปโหลดเสร็จใน ~3 วิ)
+    ข้อความพวกนี้ไม่มี resourceId — ใช้ text (คาลิเบรตกับ Shopee 3.81.32–3.82.58: ปกติอัปโหลดเสร็จใน <10 วิ)
     เช็คถี่ๆ ด้วย .exists (ไม่รอ implicit wait) เพราะป้าย "อัปโหลดสำเร็จ" อยู่บนจอแค่ช่วงสั้นๆ
     open_video=True: กดป้าย "อัปโหลดสำเร็จ / คลิกที่นี่เพื่อดูวิดีโอ" ทันทีที่เห็น
-    คืน True ถ้ากดป้ายเปิดวิดีโอแล้ว / False ถ้าไม่ได้กด (ป้ายหายไปก่อน หรือไม่ได้ขอให้กด)"""
+    คืน UPLOAD_OPENED / UPLOAD_DONE / UPLOAD_UNSEEN (ไม่เห็นแถบภายใน unseen_after วิ)"""
     start = time.time()
     progress_seen_at = None
     while time.time() - start < timeout:
         if d(text="อัปโหลดสำเร็จ").exists:
-            if open_video:
-                # TextView บนป้ายไม่ clickable แต่ .click() กดตามพิกัด → ตัวป้ายรับแทน
-                return d(text="คลิกที่นี่เพื่อดูวิดีโอ").click_exists(timeout=1)
-            return False
+            # TextView บนป้ายไม่ clickable แต่ .click() กดตามพิกัด → ตัวป้ายรับแทน
+            if open_video and d(text="คลิกที่นี่เพื่อดูวิดีโอ").click_exists(timeout=1):
+                return UPLOAD_OPENED
+            return UPLOAD_DONE
         if d(textMatches=r".*(อัปโหลดไม่สำเร็จ|อัปโหลดล้มเหลว|โพสต์ไม่สำเร็จ).*").exists:
             raise RuntimeError("Shopee แจ้งว่าอัปโหลดไม่สำเร็จ")
         if d(textStartsWith="กำลังอัปโหลด").exists:
             progress_seen_at = time.time()
         elif progress_seen_at and time.time() - progress_seen_at > 10:
-            return False  # แถบอัปโหลดหายไปโดยไม่มี error — ป้ายสำเร็จขึ้นแล้วหายไประหว่างรอบเช็ค
-        elif not progress_seen_at and time.time() - start > 30:
+            return UPLOAD_DONE  # แถบอัปโหลดหายไปโดยไม่มี error — ป้ายสำเร็จขึ้นแล้วหายไประหว่างรอบเช็ค
+        elif not progress_seen_at and time.time() - start > unseen_after:
             if d(resourceId=f"{PUBLISH_PLUGIN}:id/btn_post").exists:
                 raise RuntimeError("กดโพสต์แล้วแอปยังค้างอยู่หน้าเพิ่มแคปชั่น")
-            raise RuntimeError("กดโพสต์แล้วไม่เห็นสถานะอัปโหลดเลยภายใน 30 วิ")
+            return UPLOAD_UNSEEN
         time.sleep(0.5)
     raise RuntimeError(f"อัปโหลดนานเกิน {timeout} วิ")
 
 
-def goto_video_feed(d):
-    """ปิด-เปิดแอป Shopee ใหม่ แล้วไปหน้าฟีด Live & Video — คืนไอคอน + (สร้างวิดีโอ) มุมขวาบน"""
-    d.app_start(SHOPEE_PACKAGE, stop=True)  # ปิดแล้วเปิดใหม่ ให้เริ่มที่หน้าแรก (มีแถบเมนูล่าง) เสมอ
-    video_tab = d(description="tab_bar_button_video_and_live")  # คาลิเบรตแล้ว: แท็บ "Live & Video" แถบล่าง
-    if not video_tab.wait(timeout=30):  # แอปเปิดใหม่ช้า (splash + โหลดหน้าแรก)
-        raise RuntimeError("เปิดแอป Shopee แล้วไม่เจอแถบเมนูล่าง")
-    create_icon = d(description="click top right create icon")  # คาลิเบรตแล้ว: ไอคอน + มุมขวาบนของหน้าฟีดวิดีโอ
-    # หน้าแรกช่วงเพิ่งเปิดไม่นิ่ง — ป๊อปอัปโฆษณาเด้งช้า/แถบล่างหายชั่วคราว วนเช็คจนถึงหน้าฟีดวิดีโอ
-    deadline = time.time() + 45
-    while not create_icon.exists:
-        if time.time() > deadline:
-            raise RuntimeError("ไปหน้าฟีดวิดีโอไม่สำเร็จ (ติดป๊อปอัปหรือหาแท็บ Live & Video ไม่เจอ)")
-        if d(resourceId="popup_banner_image").exists:
-            # ป๊อปอัปโฆษณา (ปุ่ม X ไม่มี text/desc) — ย้อนกลับเพื่อปิด
-            # กดเฉพาะตอนมีป๊อปอัปจริง ไม่งั้นย้อนกลับที่หน้าแรกจะกลายเป็น "กดอีกครั้งเพื่อออก"
-            d.press("back")
-            time.sleep(1.5)
-        elif video_tab.click_exists(timeout=1):
-            time.sleep(3)  # รอฟีดวิดีโอโหลด
-        else:
-            time.sleep(1)
-    return create_icon
+VIDEO_TAB = {"description": "tab_bar_button_video_and_live"}  # คาลิเบรตแล้ว: แท็บ "Live & Video" แถบล่าง
+CREATE_ICON = {"description": "click top right create icon"}  # คาลิเบรตแล้ว: ไอคอน + มุมขวาบนของหน้าฟีดวิดีโอ
+ME_ICON = {"description": "click me page icon"}               # คาลิเบรตแล้ว: ไอคอนคนมุมซ้ายบนของฟีด → หน้าโปรไฟล์
+
+
+def goto_video_feed(d, launches=2):
+    """ปิด-เปิดแอป Shopee ใหม่ แล้วไปหน้าฟีด Live & Video — คืนไอคอน + (สร้างวิดีโอ) มุมขวาบน
+    กดแท็บแล้วรอปุ่ม + ไม่เกิน 10 วิ (เจอก่อนก็ไปต่อเลย) ไม่เจอลองกดแท็บ + รออีก 10 วิ
+    ครบ 2 รอบยังไม่เจอ = ปิดแอปแล้วเริ่มใหม่ (สูงสุด launches รอบ)"""
+    video_tab = d(**VIDEO_TAB)
+    create_icon = d(**CREATE_ICON)
+    for _ in range(launches):
+        d.app_start(SHOPEE_PACKAGE, stop=True)  # ปิดแล้วเปิดใหม่ ให้เริ่มที่หน้าแรก (มีแถบเมนูล่าง) เสมอ
+        if not video_tab.wait(timeout=30):  # แอปเปิดใหม่ช้า (splash + โหลดหน้าแรก)
+            continue
+        for _ in range(2):
+            if d(resourceId="popup_banner_image").exists:
+                # ป๊อปอัปโฆษณา (ปุ่ม X ไม่มี text/desc) — ย้อนกลับเพื่อปิด
+                # กดเฉพาะตอนมีป๊อปอัปจริง ไม่งั้นย้อนกลับที่หน้าแรกจะกลายเป็น "กดอีกครั้งเพื่อออก"
+                d.press("back")
+                time.sleep(1.5)
+            video_tab.click_exists(timeout=1)
+            if create_icon.wait(timeout=10):
+                return create_icon
+    raise RuntimeError("ไปหน้าฟีดวิดีโอไม่สำเร็จ (เปิดแอปใหม่ 2 รอบแล้วยังไม่เจอปุ่ม +)")
 
 
 def open_shopee_video_composer(d):
-    """เปิดแอป Shopee แล้วไปหน้ากล้อง 'สร้างวิดีโอ' (คาลิเบรตกับ Honor 70 / Shopee 3.81.32)"""
+    """เปิดแอป Shopee แล้วไปหน้ากล้อง 'สร้างวิดีโอ' (คาลิเบรตกับ Honor 70 / Shopee 3.82.58)"""
     d.screen_on()
     time.sleep(1)
     if "isKeyguardShowing=true" in d.shell("dumpsys window | grep isKeyguardShowing").output:
@@ -271,17 +282,14 @@ def open_shopee_video_composer(d):
             "จอโทรศัพท์ล็อกอยู่ — ปลดล็อกจอก่อน และแนะนำเปิด 'Stay awake' (ตัวเลือกนักพัฒนา) ให้จอไม่ดับตอนชาร์จ"
         )
     create_icon = goto_video_feed(d)
-    # หลังกดโพสต์ แอปกลับมาที่รายการเดิมในฟีด — ถ้าเป็นไลฟ์ แถบ "กำลังอัปโหลด/อัปโหลดสำเร็จ" ไม่ขึ้น
-    # เลยปัดจนเจอคลิปวิดีโอ (มีปุ่มคอมเมนต์) ก่อนกดสร้าง
-    for _ in range(6):
-        if d(**VIDEO_COMMENT_BTN).exists:
-            break
-        d.swipe(0.5, 0.75, 0.5, 0.25, 0.15)
-        time.sleep(2)
-    else:
-        raise RuntimeError("ปัดฟีดหลายรอบแล้วยังไม่เจอคลิปวิดีโอ (เจอแต่ไลฟ์)")
-    create_icon.click()
-    time.sleep(2)
+    # กดปุ่ม + ได้เลย ไม่ต้องสนว่าฟีดเป็นไลฟ์หรือคลิป (ถ้าหลังโพสต์ไม่เห็นแถบอัปโหลด จะไปเช็คในหน้าโปรไฟล์แทน)
+    # เน็ตช้า หน้าฟีดยังโหลดไม่เสร็จ กดแล้วอาจไม่ติด — เช็คว่าเข้าหน้ากล้องจริง (มีปุ่มคลังภาพ) ไม่งั้นรอแล้วกดใหม่
+    gallery_btn = d(resourceId=f"{SHOPEE_PACKAGE}:id/ll_gallery_entrance")
+    for _ in range(3):
+        create_icon.click_exists(timeout=10)
+        if gallery_btn.wait(timeout=10):
+            return
+    raise RuntimeError("กดปุ่ม + แล้วไม่เข้าหน้าสร้างวิดีโอ (ลอง 3 รอบ)")
 
 
 def select_video_from_gallery(d, remote_filename_hint):
@@ -316,7 +324,32 @@ def fill_caption(d, caption_text):
     caption_field = d(resourceId=f"{PUBLISH_PLUGIN}:id/et_caption")  # คาลิเบรตแล้ว
     caption_field.click()
     caption_field.set_text(caption_text[:CAPTION_MAX_CHARS])
+    # แป้นพิมพ์ที่ค้างอยู่ทำให้แตะ "เพิ่มสินค้า" ครั้งแรกแค่ปิดแป้นพิมพ์ แล้วเสียเวลารอหน้าสินค้าเปล่าๆ 20 วิ
+    # เลยปิดแป้นพิมพ์ให้เสร็จตรงนี้ก่อน
+    time.sleep(3)
+    hide_keyboard(d)
+    # ปิดแป้นพิมพ์แล้วยังมีชั้นสีดำค้างบังอยู่ (Shopee 3.82.58) — แตะ "เพิ่มสินค้า" ไม่ติด
+    # แตะที่ว่างสีขาวใต้แถว "แชร์อัตโนมัติไปยัง" 1 ที (ไม่โดนสวิตช์/ปุ่ม) ให้ชั้นนั้นหายก่อน
+    d.click(0.5, 0.8)
     time.sleep(1)
+
+
+def _keyboard_shown(d):
+    if "mInputShown=true" in d.shell("dumpsys input_method").output:
+        return True
+    return d(packageName="com.google.android.inputmethod.latin").exists  # Gboard (เห็นใน UI dump ตอนแป้นเปิด)
+
+
+def hide_keyboard(d):
+    """ปิดแป้นพิมพ์ด้วยปุ่มย้อนกลับ (กดเฉพาะตอนแป้นเปิดอยู่จริง — ไม่งั้นย้อนกลับจะออกจากหน้าแคปชั่น)
+    รอบแรกไม่ได้ รอ 5 วิแล้วลองใหม่ — ยังไม่ได้ก็ไปต่อ (ขั้นแนบสินค้ากดซ้ำเผื่อไว้อยู่แล้ว)"""
+    for attempt in range(2):
+        if attempt:
+            time.sleep(5)
+        if not _keyboard_shown(d):
+            return
+        d.press("back")
+        time.sleep(1)
 
 
 def attach_product(d, product_row):
@@ -410,7 +443,7 @@ def mp4_duration_seconds(path):
 
 
 # ── หลังโพสต์: ดูคลิปตัวเอง + กดหัวใจ + คอมเมนต์ CTA ──
-# คาลิเบรตจากหน้าฟีดวิดีโอ + แผงคอมเมนต์ (Shopee 3.81.32) — หน้าคลิปตัวเองใช้ player ตัวเดียวกัน
+# คาลิเบรตจากหน้าฟีดวิดีโอ + แผงคอมเมนต์ (Shopee 3.81.32, เช็คซ้ำกับ 3.82.58) — หน้าคลิปตัวเองใช้ player ตัวเดียวกัน
 # แผงคอมเมนต์เป็น React Native ไม่มี resourceId — ใช้ content-desc
 VIDEO_LIKE_BTN = {"resourceId": "like btn"}
 VIDEO_COMMENT_BTN = {"description": "click video comment_icon"}
@@ -487,16 +520,35 @@ def _norm(s):
     return " ".join(str(s or "").split())
 
 
-def open_latest_own_video(d, product_name, attempts=3):
-    """ทางสำรองเมื่อกดป้าย "อัปโหลดสำเร็จ" ไม่ทัน: ฟีดวิดีโอ → ไอคอนโปรไฟล์มุมซ้ายบน → ตารางคลิป
-    → ช่องแรกที่ไม่ได้ปักหมุด (= คลิปใหม่สุด) แล้วเช็คชื่อสินค้าที่แนบว่าตรงกับคลิปที่เพิ่งโพสต์
+def _goto_profile_in_app(d):
+    """ไปหน้าโปรไฟล์โดยไม่ปิดแอป (หลังกดโพสต์อาจยังอัปโหลดอยู่ — ปิดแอปตอนนี้อาจตัดการอัปโหลด)
+    อยู่หน้าโปรไฟล์อยู่แล้ว → ย้อนกลับฟีดก่อน (ให้ตารางคลิปโหลดใหม่) / อยู่ที่อื่น → กดแท็บ Live & Video"""
+    me = d(**ME_ICON)
+    for _ in range(3):
+        if me.exists:
+            me.click()
+            return True
+        if not d(description="click to get back").click_exists(timeout=1):  # ปุ่มย้อนกลับหน้าโปรไฟล์/หน้าคลิป
+            d(**VIDEO_TAB).click_exists(timeout=1)
+        me.wait(timeout=10)
+    return False
+
+
+def open_latest_own_video(d, product_name, attempts=3, restart=False):
+    """ฟีดวิดีโอ → ไอคอนโปรไฟล์มุมซ้ายบน → ตารางคลิป → ช่องแรกที่ไม่ได้ปักหมุด (= คลิปใหม่สุด)
+    แล้วเช็คชื่อสินค้าที่แนบว่าตรงกับคลิปที่เพิ่งโพสต์ (กันไปกดหัวใจ/คอมเมนต์ผิดคลิป)
+    ใช้ทั้งตอนกดป้าย "อัปโหลดสำเร็จ" ไม่ทัน และตอนไม่เห็นแถบอัปโหลดเลย (ใช้ยืนยันว่าคลิปขึ้นแล้ว)
+    restart=False: ไม่ปิดแอป ไปหน้าโปรไฟล์จากในแอป / True: ไปไม่ได้ค่อยปิด-เปิดแอปใหม่ (ใช้ตอนรู้ว่าอัปโหลดเสร็จแล้ว)
     คลิปอาจยังไม่ขึ้นในโปรไฟล์ทันที เลยลองซ้ำได้ — คืน True ถ้าเปิดคลิปที่ถูกต้องได้"""
     want = _norm(product_name)[:25]
     for i in range(attempts):
         if i:
             time.sleep(15)
-        goto_video_feed(d)
-        d(description="click me page icon").click()  # คาลิเบรตแล้ว: ไอคอนคนมุมซ้ายบนของฟีด
+        if not _goto_profile_in_app(d):
+            if not restart:
+                continue
+            goto_video_feed(d)
+            d(**ME_ICON).click()
         cells = d(descriptionMatches=r"click video \d+")
         if not cells.wait(timeout=15):
             continue
@@ -521,13 +573,13 @@ def open_latest_own_video(d, product_name, attempts=3):
     return False
 
 
-def engage_own_video(d, comment_text, video_seconds=None, watch_seconds=40):
-    """ทำต่อจาก wait_upload_done(open_video=True): ดูคลิป ~40 วิ → กดหัวใจ → คอมเมนต์ CTA
+def engage_own_video(d, comment_text, video_seconds=None, watch_seconds=5):
+    """ทำต่อจากตอนเปิดคลิปตัวเองแล้ว: ดูคลิป watch_seconds วิ → กดหัวใจ → คอมเมนต์ CTA
     → กดหัวใจคอมเมนต์ตัวเอง → ปิดแผงคอมเมนต์ ดูจนจบคลิป → ปิดแอป Shopee"""
     opened_at = time.time()
     if not _video_page_ready(d):
         raise RuntimeError("กดป้ายอัปโหลดสำเร็จแล้วไม่เข้าหน้าวิดีโอ")
-    time.sleep(max(0, opened_at + watch_seconds + random.uniform(0, 5) - time.time()))
+    time.sleep(max(0, opened_at + watch_seconds - time.time()))
     like_video(d)
     if comment_text:
         node = post_comment(d, comment_text)
