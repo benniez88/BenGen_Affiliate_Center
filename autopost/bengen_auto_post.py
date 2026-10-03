@@ -352,41 +352,66 @@ def hide_keyboard(d):
         time.sleep(1)
 
 
+class ProductNotAllowed(RuntimeError):
+    """Shopee ไม่ยอมให้แนบสินค้านี้ในวิดีโอ (สินค้าถูกยกเว้น) — ลองใหม่กี่รอบก็ไม่ผ่าน"""
+
+
 def attach_product(d, product_row):
     """
     แนบสินค้าด้วย "กรอกลิงก์สินค้า" (แม่นกว่าค้นหาด้วยชื่อ — ได้สินค้าตัวที่ถูกต้องแน่นอน)
     หน้าเพิ่มสินค้าเป็น React Native ไม่มี resourceId — ใช้ข้อความบนจอแทน
     """
-    product_url = product_row.get("productUrl") or product_row.get("affiliateLink")
-    if not product_url:
-        raise RuntimeError(f"สินค้า {product_row.get('id')} ไม่มี productUrl — แนบสินค้าไม่ได้")
+    # ลองลิงก์สินค้าก่อน ถ้าวางแล้วไม่มีสินค้าขึ้น (ลิงก์ผิด/รูปแบบแปลก) ค่อยลอง affiliateLink — ใช้ได้เหมือนกัน
+    links = []
+    for key in ("productUrl", "affiliateLink"):
+        url = str(product_row.get(key) or "").strip()
+        if url and url not in links:
+            links.append(url)
+    if not links:
+        raise RuntimeError(f"สินค้า {product_row.get('id')} ไม่มีทั้ง productUrl และ affiliateLink — แนบสินค้าไม่ได้")
 
     # หลังพิมพ์แคปชั่น แป้นพิมพ์ยังเปิดค้าง — แตะครั้งแรกมักแค่ปิดแป้นพิมพ์ เลยลองซ้ำได้
     # รอข้อความที่มีเฉพาะหน้าเพิ่มสินค้า (หน้าแคปชั่นก็มีหัวข้อ "เพิ่มสินค้า" — ใช้คำนั้นเช็คไม่ได้)
     # บางครั้งหน้านี้โหลดช้า (เคยพังเพราะรอ 8 วิไม่พอ) — รอรอบละ 20 วิ สูงสุด 4 รอบ
     product_page = d(text="ร้านค้าของฉัน")
     for _ in range(4):
-        d(resourceId=f"{PUBLISH_PLUGIN}:id/ll_add_product_symbol").click_exists(timeout=5)  # คาลิเบรตแล้ว: "แตะเพื่อเพิ่มสินค้า"
+        if not product_page.exists:  # กดรอบก่อนติดแล้วแต่หน้าโหลดช้า — อย่ากดซ้ำ
+            d(resourceId=f"{PUBLISH_PLUGIN}:id/ll_add_product_symbol").click_exists(timeout=5)  # คาลิเบรตแล้ว: "แตะเพื่อเพิ่มสินค้า"
         if product_page.wait(timeout=20):
             break
     else:
         raise RuntimeError("ไม่เจอหน้า 'เพิ่มสินค้า'")
-    time.sleep(2)  # รอรายการสินค้าโหลดก่อนกดไอคอน
-    d.click(0.922, 0.065)  # ไอคอน 🔗 มุมขวาบน — ไม่มี text/desc ต้องกดตามตำแหน่ง (จอ 1080x2400)
-    if not d(text="กรอกลิงก์สินค้า").wait(timeout=10):
-        raise RuntimeError("กดไอคอน 🔗 แล้วไม่เจอหน้า 'กรอกลิงก์สินค้า'")
+    time.sleep(5)  # เน็ตช้า รายการสินค้ายังโหลดไม่เสร็จ กดไอคอนเร็วไปจะไม่ติด
+    link_box = d(className="android.widget.EditText")
+    link_page = d(text="กรอกลิงก์สินค้า")
+    for _ in range(2):
+        if not link_page.exists:  # อยู่หน้ากรอกลิงก์แล้วห้ามกดตำแหน่งเดิมซ้ำ
+            d.click(0.922, 0.065)  # ไอคอน 🔗 มุมขวาบน — ไม่มี text/desc ต้องกดตามตำแหน่ง (จอ 1080x2400)
+        if link_page.wait(timeout=10) and link_box.wait(timeout=10):
+            break
+        time.sleep(5)
+    else:
+        raise RuntimeError("กดไอคอน 🔗 แล้วไม่เจอช่องกรอกลิงก์สินค้า")
 
     # ใส่ลิงก์ลงช่องตรงๆ (ทาง clipboard + "วางลิงก์" ไม่ติดเมื่อสั่งจากสคริปต์)
     # พอช่องมีข้อความ ปุ่ม "วางลิงก์" จะเปลี่ยนเป็น "นำเข้า"
-    link_box = d(className="android.widget.EditText")
-    link_box.click()
-    time.sleep(1)
-    link_box.set_text(product_url)
-    if not d(text="นำเข้า").wait(timeout=5):
-        raise RuntimeError("ใส่ลิงก์แล้วไม่มีปุ่ม 'นำเข้า'")
-    d(text="นำเข้า").click()
-    if not d(textContains="ค่าคอม").wait(timeout=15):  # รอสินค้าโผล่ในส่วน "รายการสินค้า"
-        raise RuntimeError(f"นำเข้าลิงก์แล้วไม่มีสินค้าขึ้น: {product_url}")
+    for i, url in enumerate(links):
+        link_box.click()
+        time.sleep(1)
+        link_box.set_text(url)  # set_text ล้างข้อความเดิมก่อน — รอบสองจะทับลิงก์ที่ไม่ได้ผล
+        if not d(text="นำเข้า").wait(timeout=5):
+            raise RuntimeError("ใส่ลิงก์แล้วไม่มีปุ่ม 'นำเข้า'")
+        d.toast.reset()
+        d(text="นำเข้า").click()
+        if d(textContains="ค่าคอม").wait(timeout=15):  # รอสินค้าโผล่ในส่วน "รายการสินค้า"
+            break
+        # นำเข้าไม่ได้ Shopee จะเด้ง toast บอกเหตุผล เช่น "นำเข้าไม่สำเร็จ เนื่องจากมีลิงก์สินค้าที่ถูกยกเว้น"
+        toast = d.toast.get_message(3, 20, "") or ""
+        if "ยกเว้น" in toast:
+            # ตัวสินค้าถูกยกเว้น ลิงก์ไหนก็ไม่ผ่าน (affiliateLink พาไปสินค้าชิ้นเดิม) — ไม่ต้องลองต่อ
+            raise ProductNotAllowed(f"Shopee ไม่ให้แนบสินค้านี้: {toast}")
+    else:
+        raise RuntimeError("นำเข้าลิงก์แล้วไม่มีสินค้าขึ้น: " + " | ".join(u[:80] for u in links))
     time.sleep(1)
     d(text="เลือกทั้งหมด").click()
     # พอเลือกแล้ว ปุ่มเปลี่ยนจาก "เพิ่ม" เป็น "เพิ่ม(1)" — ใช้เป็นตัวยืนยันว่าเลือกติดด้วย

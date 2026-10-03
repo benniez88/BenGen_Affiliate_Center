@@ -476,6 +476,10 @@ class Agent:
                 self.write(cid, "postError", "พังหลังกดโพสต์ ต้องเช็คในแอปว่าคลิปขึ้นแล้วหรือยัง: " + msg)
             else:
                 attempts = int(fresh.get("postAttempts") or 0) + 1
+                if isinstance(e, bap.ProductNotAllowed):
+                    # ลองใหม่ก็ไม่ผ่าน — ข้ามเลย (postAttempts เกิน retry_max = กลุ่ม "ล้มเหลว")
+                    attempts = max(attempts, cfg.get("retry_max", 2) + 1)
+                    msg = f"{e} — เปลี่ยนสินค้าแล้วตั้งเวลาใหม่"
                 log.error("✖ %s พังก่อนกดโพสต์ (ครั้งที่ %d): %s", cid, attempts, msg)
                 try:
                     if d is not None:
